@@ -9,7 +9,7 @@
     root.innerHTML = '';
     root.appendChild(el('div', { class: 'pu' }, [el('p', { class: 'muted' }, [el('span', { class: 'spin' }), 'Loading form…'])]));
 
-    Promise.all([R.loadConfig(t), t.board('labels', 'name'), t.lists('id', 'name'), R.ops.cardNames(t).catch(function () { return []; })]).then(function (r) {
+    Promise.all([R.loadConfig(t), t.board('labels', 'name'), t.lists('id', 'name')]).then(function (r) {
       var cfg = r[0], labels = r[1].labels || [], lists = r[2] || [];
       var labelById = {}; labels.forEach(function (l) { labelById[l.id] = l; });
       var destList = lists.filter(function (l) { return l.id === cfg.listId; })[0]
@@ -175,7 +175,7 @@
         var cat = cats[state.category], ty = types[state.type], card, finalId, finalName, coverUrl = null;
 
         R.ensureAuth(t)
-          .then(function () { return R.ops.cardNames(t); })            // fresh scan right before creating
+          .then(function () { return R.ops.cardNames(t, cfg); })       // fresh scan right before creating
           .then(function (names) {
             finalId = R.nextIdOf(cat, state.category, names);
             finalName = R.buildName(cfg.pattern, { id: finalId, name: nameIn.value.trim(), category: cat.name, type: ty.name });

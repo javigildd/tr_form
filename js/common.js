@@ -32,6 +32,7 @@
       { label: 'Link 2', placeholder: 'https://…', required: false }
     ],
     notes: { label: 'Notes', placeholder: 'Anything else? Paste links or images here.', required: false },
+    ids: { countArchived: true },
     listId: '',
     pattern: '{id}_{name}',
     admins: []
@@ -89,6 +90,7 @@
       cfg.notes.placeholder = str(stored.notes.placeholder, cfg.notes.placeholder);
       cfg.notes.required = !!stored.notes.required;
     }
+    if (stored.ids && typeof stored.ids === 'object') cfg.ids.countArchived = stored.ids.countArchived !== false;
     cfg.listId = str(stored.listId, cfg.listId);
     cfg.pattern = str(stored.pattern, cfg.pattern) || DEFAULTS.pattern;
     if (Array.isArray(stored.admins)) cfg.admins = stored.admins.filter(function (s) { return typeof s === 'string'; });
@@ -104,9 +106,9 @@
       o.base = Math.max(100, Math.round((Number(o.base) || (i + 1) * 100) / 100) * 100);
       while (used[o.base]) o.base += 100;
       used[o.base] = true;
-      // Optional "next ID" override: must sit inside the option's block, otherwise it is dropped.
+      // Optional "start from" value for the next ID: must sit inside the option's block, otherwise it is dropped.
       var nx = Math.floor(Number(o.next));
-      if (nx > o.base && nx < o.base + 100) o.next = nx; else delete o.next;
+      if (nx >= o.base && nx < o.base + 100) o.next = nx; else delete o.next;
     });
     cfg.type.options = cfg.type.options.filter(function (o) { return (o.name || '').trim(); }).map(function (o) { o.name = o.name.trim(); return o; });
     if (!cfg.type.options.length) cfg.type.options = clone(DEFAULTS.type.options);
@@ -133,19 +135,34 @@
     (cardNames || []).forEach(function (n) { var v = idOf(n); if (v != null && v >= base && v < base + 100 && (hi == null || v > hi)) hi = v; });
     return hi;
   }
-  /* Next ID = highest ID already on the board within this option's block, plus one.
-     An admin can set a higher "next" in the settings (floor); it never goes below highest + 1, so IDs are never reused. */
-  function nextIdFor(base, cardNames, floor) {
-    var hi = highestIdIn(base, cardNames);
-    var n = hi == null ? base : hi + 1;
-    floor = Math.floor(Number(floor));
-    return floor > n ? floor : n;
+  /* Set of IDs in use within a block. */
+  function usedIdsIn(base, cardNames) {
+    var used = {};
+    (cardNames || []).forEach(function (n) { var v = idOf(n); if (v != null && v >= base && v < base + 100) used[v] = true; });
+    return used;
+  }
+  /* Next ID. Default: the highest ID already on the board within this option's block, plus one.
+     If an admin set a "start from" value in the settings, the next ID is the first number from
+     that value upwards that no counted card uses. Either way an ID in use is never handed out again. */
+  function nextIdFor(base, cardNames, start) {
+    start = Math.floor(Number(start));
+    if (!(start >= base && start < base + 100)) {
+      var hi = highestIdIn(base, cardNames);
+      return hi == null ? base : hi + 1;
+    }
+    var used = usedIdsIn(base, cardNames), n = start;
+    while (used[n]) n++;
+    return n;
   }
   function nextIdOf(opt, i, cardNames) { return nextIdFor(baseOf(opt, i), cardNames, opt && opt.next); }
   function buildName(pattern, d) {
     return (pattern || DEFAULTS.pattern).replace(/\{(id|name|category|type)\}/g, function (_, key) { return d[key] == null ? '' : String(d[key]); }).trim();
   }
   function isUrl(s) { return /^https?:\/\/\S+$/i.test((s || '').trim()); }
+  function countedNames(cards, cfg) {
+    var countArchived = !cfg || !cfg.ids || cfg.ids.countArchived !== false;
+    return (cards || []).filter(function (c) { return countArchived || !c.closed; }).map(function (c) { return c.name; });
+  }
 
   /* Card description: a summary line, then one section per filled-in link and the notes. */
   function buildDesc(cfg, d) {
@@ -200,11 +217,14 @@
 
   /* Board operations, real or mock. */
   var ops = {
-    cardNames: function (t) {
-      if (t.__mock) return Promise.resolve(t.store.cards.map(function (c) { return c.name; }));
-      return t.board('id').then(function (b) { return rest(t, 'GET', '/boards/' + b.id + '/cards/all', { fields: 'name' }); })
-        .then(function (cards) { return cards.map(function (c) { return c.name; }); });
+    /* Every card on the board (open and archived) as { name, closed }. */
+    cards: function (t) {
+      if (t.__mock) return Promise.resolve(t.store.cards.map(function (c) { return { name: c.name, closed: !!c.closed }; }));
+      return t.board('id').then(function (b) { return rest(t, 'GET', '/boards/' + b.id + '/cards/all', { fields: 'name,closed' }); })
+        .then(function (cards) { return cards.map(function (c) { return { name: c.name, closed: !!c.closed }; }); });
     },
+    /* Names of the cards that count for ID purposes (archived ones only if the config says so). */
+    cardNames: function (t, cfg) { return ops.cards(t).then(function (cards) { return countedNames(cards, cfg); }); },
     createCard: function (t, data) {
       if (t.__mock) {
         var card = { id: 'c' + Date.now(), name: data.name, desc: data.desc, idList: data.idList,
@@ -321,7 +341,7 @@
     APP_KEY: APP_KEY, APP_NAME: APP_NAME, DEFAULTS: DEFAULTS, MAX_LINKS: MAX_LINKS,
     labelHex: labelHex, labelInk: labelInk,
     loadConfig: loadConfig, saveConfig: saveConfig, mergeConfig: mergeConfig, normalizeConfig: normalizeConfig, idOf: idOf,
-    baseOf: baseOf, nextIdFor: nextIdFor, nextIdOf: nextIdOf, highestIdIn: highestIdIn, buildName: buildName, buildDesc: buildDesc, isUrl: isUrl,
+    baseOf: baseOf, nextIdFor: nextIdFor, nextIdOf: nextIdOf, highestIdIn: highestIdIn, usedIdsIn: usedIdsIn, countedNames: countedNames, buildName: buildName, buildDesc: buildDesc, isUrl: isUrl,
     isAdmin: isAdmin, ensureAuth: ensureAuth, rest: rest, ops: ops, getT: getT, renderOutsideTrello: renderOutsideTrello, MockT: MockT, el: el
   };
 })(window);

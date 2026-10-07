@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Request Form — Power-Up connector</title>
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
-<script src="./js/common.js?v=20261007e"></script>
+<script src="./js/common.js?v=20261007f"></script>
 </head>
 <body>
 <script>
@@ -16,10 +16,10 @@
   var ICON = { dark: BASE + 'icon-dark.svg', light: BASE + 'icon-light.svg' };
 
   function openForm(t) {
-    return t.modal({ url: './form.html?v=20261007e', title: 'New request', height: 1000, fullscreen: false, accentColor: '#0C66E4' });
+    return t.modal({ url: './form.html?v=20261007f', title: 'New request', height: 1000, fullscreen: false, accentColor: '#0C66E4' });
   }
   function openSettings(t) {
-    return t.modal({ url: './settings.html?v=20261007e', title: 'Form settings', height: 1000, fullscreen: false, accentColor: '#0C66E4' });
+    return t.modal({ url: './settings.html?v=20261007f', title: 'Form settings', height: 1000, fullscreen: false, accentColor: '#0C66E4' });
   }
   function isAdmin(t) {
     return RF.loadConfig(t).then(function (cfg) { return RF.isAdmin(t, cfg); }).catch(function () { return false; });
