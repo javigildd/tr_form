@@ -1,0 +1,183 @@
+<title>Request Form</title>
+<link rel="stylesheet" href="./css/powerup.css">
+<style>
+  body { background: var(--bg); background-image: radial-gradient(900px 400px at 15% -10%, rgba(79,141,255,.18), transparent 60%); }
+  .shell { max-width: 1120px; margin: 0 auto; padding-block: 20px 40px; padding-inline: 16px; }
+  .top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .top h1 { font-size: 20px; margin: 0; }
+  .top .demo { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-bright); background: var(--accent-soft); padding: 4px 10px; border-radius: 999px; }
+  .top .sub { color: var(--muted); flex-basis: 100%; margin: 0; max-width: 70ch; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; flex-wrap: wrap; }
+  .tabs button { font: inherit; font-weight: 600; background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; color: var(--muted); cursor: pointer; margin-bottom: -1px; }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent-bright); }
+  .panes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  @media (min-width: 900px) { .panes.split { grid-template-columns: minmax(0, 620px) minmax(0, 1fr); align-items: start; } }
+  .pane { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+  .pane #root { background: var(--bg); }
+  .pane .bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .pane .bar b { color: var(--ink); font-weight: 600; }
+  .list { padding: 12px; min-height: 240px; }
+  .list h3 { font-size: 14px; margin: 0 0 10px; display: flex; justify-content: space-between; }
+  .list h3 span { color: var(--muted); font-weight: 500; }
+  .tcard { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; overflow: hidden; }
+  .tcard .cv { margin: -8px -10px 8px; max-height: 140px; overflow: hidden; }
+  .tcard .cv img { display: block; width: 100%; object-fit: cover; }
+  .tcard .tl { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+  .tcard .tl span { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 3px; min-width: 40px; }
+  .tcard .tn { font-weight: 600; overflow-wrap: anywhere; }
+  .tcard .td { color: var(--muted); font-size: 12px; margin-top: 4px; white-space: pre-line; max-height: 4.2em; overflow: hidden; }
+  .tcard .tm { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .tcard .imgs { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .tcard .imgs img { width: 56px; height: 56px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+  .draft { position: relative; border: 1.5px dashed var(--accent); background: linear-gradient(180deg, rgba(79,141,255,.10), rgba(79,141,255,.03)); border-radius: 10px; padding: 8px 10px; margin-bottom: 14px; overflow: hidden; }
+  .draft .badge { position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-bright); background: rgba(8,12,20,.75); padding: 3px 8px; border-radius: 999px; z-index: 1; }
+  .draft .cv { margin: -8px -10px 8px; max-height: 140px; overflow: hidden; }
+  .draft .cv img { display: block; width: 100%; object-fit: cover; }
+  .draft .tl { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; min-height: 18px; }
+  .draft .tl span { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 3px; min-width: 40px; }
+  .draft .tl .ph { background: var(--surface-3); color: var(--muted); border: 1px dashed var(--border-strong); }
+  .draft .tn { font-weight: 700; overflow-wrap: anywhere; }
+  .draft .tn .id { color: var(--accent-bright); font-family: var(--mono); }
+  .draft .tn .ph { color: var(--muted); font-weight: 500; }
+  .draft .td { color: var(--muted); font-size: 12px; margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+  .draft .td .ln { display: flex; gap: 6px; align-items: baseline; }
+  .draft .td .k { color: var(--ink); font-weight: 700; flex: 0 0 auto; }
+  .draft .td .v { overflow-wrap: anywhere; }
+  .draft .td .v.ph { color: var(--border-strong); }
+  .draft .td .v.notes { white-space: pre-line; max-height: 4.2em; overflow: hidden; }
+  .draft .imgs { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .draft .imgs img { width: 56px; height: 56px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+  .draft .tm { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .sep { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 4px 0 8px; }
+  .empty { color: var(--muted); font-size: 13px; text-align: center; padding: 30px 10px; border: 1.5px dashed var(--border); border-radius: 8px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--surface-3); color: var(--ink); border: 1px solid var(--border-strong); padding: 10px 16px; border-radius: 6px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.25); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .how { margin-top: 26px; color: var(--muted); font-size: 13px; max-width: 72ch; }
+  .how h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 8px; color: var(--muted); }
+  .how ol { padding-left: 20px; margin: 0; }
+  .how li { margin-bottom: 4px; }
+</style>
+
+<div class="shell">
+  <div class="top">
+    <h1>Request Form</h1>
+    <span class="demo">Demo mode</span>
+    <p class="sub">Preview of the Trello Power-Up. Everything here runs against a simulated board: cards you create land in the Board pane on the right, nothing is written to Trello.</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-form" aria-selected="true">New request</button>
+    <button role="tab" id="tab-settings" aria-selected="false">Settings (admin)</button>
+  </div>
+
+  <div class="panes split">
+    <div class="pane">
+      <div class="bar"><span id="pane-title"><b>New request</b> · what every member sees after clicking the board button</span></div>
+      <div id="root"></div>
+    </div>
+    <div class="pane">
+      <div class="bar"><span><b>Board</b> · Demo board</span><button class="btn small" id="reset">Reset demo</button></div>
+      <div class="list">
+        <h3>Requests <span id="count">0</span></h3>
+        <div id="draft"></div>
+        <div class="sep" id="sep">Created in this demo</div>
+        <div id="cards"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="how">
+    <h2>How it works on the real board</h2>
+    <ol>
+      <li>A <b>New request</b> button appears at the top of the board. Admins also see <b>Form settings</b>.</li>
+      <li>The form validates required fields, scans every card on the board and takes the highest ID in the chosen option's block (100s, 200s, …) plus one, then creates the card in the configured list with the selector and type labels. The thumbnail becomes the card cover.</li>
+      <li>Links are added as attachments and to the description. Pasted images are uploaded to the card and shown inline.</li>
+      <li>Every word you see in the form (title, field labels, option names, hints) and every mapping to a label is edited in Settings and stored on the board itself. The code carries only the neutral placeholders shown in this demo.</li>
+    </ol>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="./js/common.js"></script>
+<script src="./js/form.js"></script>
+<script src="./js/settings.js"></script>
+<script>
+(function () {
+  var t = new RF.MockT();
+  var root = document.getElementById('root'), cards = document.getElementById('cards'), count = document.getElementById('count'), draftEl = document.getElementById('draft');
+  var tabs = { form: document.getElementById('tab-form'), settings: document.getElementById('tab-settings') };
+  var title = document.getElementById('pane-title');
+  var current = 'form';
+
+  function show(which) {
+    current = which;
+    Object.keys(tabs).forEach(function (k) { tabs[k].setAttribute('aria-selected', k === which ? 'true' : 'false'); });
+    if (which === 'form') {
+      title.innerHTML = '<b>New request</b> · what every member sees after clicking the board button';
+      RFForm.render(root, t, { onCreated: drawBoard, onChange: drawDraft });
+    } else {
+      title.innerHTML = '<b>Settings</b> · only board admins can open this';
+      drawDraft(null);
+      RFSettings.render(root, t, { onSaved: function () { toast('Settings saved'); } });
+    }
+  }
+  tabs.form.addEventListener('click', function () { show('form'); });
+  tabs.settings.addEventListener('click', function () { show('settings'); });
+
+  /* Live card preview: fills in as the form is typed. ID shows as 1XX, 2XX… (block of the chosen option) or XXX. */
+  function drawDraft(d) {
+    var E = RF.el;
+    draftEl.innerHTML = '';
+    if (!d) { draftEl.appendChild(E('div', { class: 'draft' }, [E('span', { class: 'badge', text: 'Preview' }), E('div', { class: 'tn' }, [E('span', { class: 'id', text: 'XXX' }), E('span', { class: 'ph', text: '_Request name' })]), E('div', { class: 'tm', text: 'Fill in the form to see the card take shape here.' })])); return; }
+    var tl = E('div', { class: 'tl' });
+    if (d.labels.length) d.labels.forEach(function (l) { tl.appendChild(E('span', { text: l.name, style: 'background:' + RF.labelHex(l.color) + ';color:' + RF.labelInk(l.color) })); });
+    else tl.appendChild(E('span', { class: 'ph', text: 'labels' }));
+    var parts = d.cardName.split(d.idMask);
+    var tn = E('div', { class: 'tn' }, [parts[0] ? E('span', { text: parts[0] }) : null, E('span', { class: 'id', text: d.idMask }), E('span', { class: d.name ? '' : 'ph', text: parts.slice(1).join(d.idMask) })]);
+    function line(k, v, cls) { return E('div', { class: 'ln' }, [E('span', { class: 'k', text: k }), E('span', { class: 'v ' + (v ? '' : 'ph ') + (cls || ''), text: v || '—' })]); }
+    var td = E('div', { class: 'td' }, [line(d.categoryLabel, d.category), line(d.typeLabel, d.type)]
+      .concat(d.links.map(function (l) { return line(l.label, l.value); }))
+      .concat([d.notes ? line(d.notesLabel, d.notes, 'notes') : null]));
+    var imgs = E('div', { class: 'imgs' });
+    d.files.filter(function (f) { return f.isImage && f.url; }).forEach(function (f) { imgs.appendChild(E('img', { src: f.url, alt: f.name })); });
+    var att = d.links.filter(function (l) { return l.value; }).length + d.files.length + (d.coverUrl ? 1 : 0);
+    draftEl.appendChild(E('div', { class: 'draft' }, [
+      E('span', { class: 'badge', text: 'Preview' }),
+      d.coverUrl ? E('div', { class: 'cv' }, [E('img', { src: d.coverUrl, alt: 'Thumbnail' })]) : null,
+      tl, tn, td, imgs.children.length ? imgs : null,
+      E('div', { class: 'tm', text: 'Will go to “' + d.list + '” · ' + att + ' attachment' + (att === 1 ? '' : 's') })
+    ]));
+  }
+
+  function drawBoard() {
+    var labels = {}; t.store.labels.forEach(function (l) { labels[l.id] = l; });
+    var lists = {}; t.store.lists.forEach(function (l) { lists[l.id] = l.name; });
+    cards.innerHTML = ''; count.textContent = t.store.cards.length;
+    document.getElementById('sep').style.display = t.store.cards.length ? '' : 'none';
+    if (!t.store.cards.length) return;
+    t.store.cards.forEach(function (c) {
+      var tl = RF.el('div', { class: 'tl' });
+      c.idLabels.forEach(function (id) { var l = labels[id]; if (l) tl.appendChild(RF.el('span', { text: l.name, style: 'background:' + RF.labelHex(l.color) + ';color:' + RF.labelInk(l.color) })); });
+      var imgs = RF.el('div', { class: 'imgs' });
+      c.attachments.filter(function (a) { return a.isImage; }).forEach(function (a) { imgs.appendChild(RF.el('img', { src: a.url, alt: a.name })); });
+      var links = c.attachments.filter(function (a) { return !a.isImage; }).length;
+      cards.appendChild(RF.el('div', { class: 'tcard' }, [
+        c.cover ? RF.el('div', { class: 'cv' }, [RF.el('img', { src: c.cover, alt: 'Cover' })]) : null,
+        tl,
+        RF.el('div', { class: 'tn', text: c.name }),
+        RF.el('div', { class: 'td', text: (c.desc || '').replace(/[#*]/g, '') }),
+        imgs.children.length ? imgs : null,
+        RF.el('div', { class: 'tm' }, [RF.el('span', { text: 'in ' + (lists[c.idList] || '?') }), RF.el('span', { text: c.attachments.length + ' attachment' + (c.attachments.length === 1 ? '' : 's') + (links ? ' (' + links + ' link' + (links === 1 ? '' : 's') + ')' : '') })])
+      ]));
+    });
+  }
+
+  document.getElementById('reset').addEventListener('click', function () { t.reset(); t = new RF.MockT(); drawBoard(); show(current); toast('Demo data reset'); });
+  window.addEventListener('rf:close', function () { show('form'); });
+  window.addEventListener('rf:alert', function (e) { toast(e.detail && e.detail.message ? e.detail.message : String(e.detail)); });
+  var toastEl = document.getElementById('toast'), tm;
+  function toast(m) { toastEl.textContent = m; toastEl.classList.add('show'); clearTimeout(tm); tm = setTimeout(function () { toastEl.classList.remove('show'); }, 2600); }
+
+  drawBoard(); drawDraft(null); show('form');
+})();
+</script>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Request Form — Power-Up connector</title>
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+<script>
+/* Connector iframe. Registers the board button(s) and the settings screen. */
+(function () {
+  var APP_KEY = 'aeb7699b59456bf69ed953440b998eef';
+  var APP_NAME = 'Request Form';
+  var BASE = location.href.replace(/[^/]*$/, '');
+  var ICON = { dark: BASE + 'icon-dark.svg', light: BASE + 'icon-light.svg' };
+
+  function openForm(t) {
+    return t.modal({ url: './form.html', title: 'New request', height: 760, fullscreen: false, accentColor: '#0C66E4' });
+  }
+  function openSettings(t) {
+    return t.modal({ url: './settings.html', title: 'Form settings', height: 820, fullscreen: false, accentColor: '#0C66E4' });
+  }
+  function isAdmin(t) {
+    return Promise.all([t.member('id'), t.board('memberships')]).then(function (r) {
+      var ms = (r[1] && r[1].memberships) || [];
+      return ms.some(function (m) { return m.idMember === r[0].id && m.memberType === 'admin'; });
+    }).catch(function () { return false; });
+  }
+
+  TrelloPowerUp.initialize({
+    'board-buttons': function (t) {
+      return isAdmin(t).then(function (admin) {
+        var buttons = [{ icon: ICON, text: 'New request', callback: openForm }];
+        if (admin) buttons.push({ icon: ICON, text: 'Form settings', callback: openSettings });
+        return buttons;
+      });
+    },
+    'show-settings': openSettings
+  }, { appKey: APP_KEY, appName: APP_NAME });
+})();
+</script>
+</body>
+</html>
