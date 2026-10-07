@@ -3,17 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Request form settings</title>
+<title>Request Form — authorization</title>
 <link rel="stylesheet" href="./css/powerup.css">
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <script src="./js/common.js"></script>
-<script src="./js/settings.js"></script>
 </head>
 <body>
 <div id="root"></div>
 <script>
-var root = document.getElementById('root'), t = RF.getT();
-if (t) RFSettings.render(root, t); else RF.renderOutsideTrello(root);
+/* Trello sends the user back here after they authorize the Power-Up. The library reads the token
+   from the URL fragment, stores it for this origin, hands it to the window that opened the popup
+   and closes this window. */
+RF.getT();
+RF.renderOutsideTrello(document.getElementById('root'));
 </script>
 </body>
 </html>

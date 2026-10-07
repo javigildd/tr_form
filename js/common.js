@@ -162,11 +162,13 @@
   }
 
   /* ---------- Trello REST (real mode) ---------- */
+  /* The authorize popup comes back to auth.html (same origin), which stores the token and closes itself. */
   function ensureAuth(t) {
     var api = t.getRestApi();
     return api.isAuthorized().then(function (ok) {
       if (ok) return;
-      return api.authorize({ scope: 'read,write', expiration: 'never' });
+      var base = global.location.href.replace(/[^/]*$/, '');
+      return api.authorize({ scope: 'read,write', expiration: 'never', returnUrl: base + 'auth.html' });
     });
   }
   function rest(t, method, path, params, body) {
@@ -265,11 +267,25 @@
       getToken: function () { return Promise.resolve('demo'); }, clearToken: function () { return Promise.resolve(); } };
   };
 
+  /* Returns the real Trello client when the page runs inside Trello, the demo mock when the
+     Trello library is not loaded at all (preview), and null when a real page is opened on its own.
+     If the page was opened by the authorization popup (token in the URL fragment), the library
+     stores the token and closes the window; we return null so nothing else renders. */
   function getT() {
-    if (global.TrelloPowerUp && global.parent !== global) {
-      try { return global.TrelloPowerUp.iframe({ appKey: APP_KEY, appName: APP_NAME }); } catch (e) { /* fall through */ }
-    }
-    return new MockT();
+    if (!global.TrelloPowerUp) return new MockT();
+    var hasToken = /token=/.test(global.location.hash || '');
+    if (global.parent === global && !hasToken) return null;
+    try {
+      var t = global.TrelloPowerUp.iframe({ appKey: APP_KEY, appName: APP_NAME });
+      if (hasToken) { var api = t.getRestApi(); if (api && typeof api.init === 'function') api.init(); return null; }
+      return t;
+    } catch (e) { return null; }
+  }
+  function renderOutsideTrello(root) {
+    var authed = /token=/.test(global.location.hash || '');
+    root.innerHTML = '';
+    root.appendChild(el('div', { class: 'pu' }, [el('div', { class: authed ? 'notice ok' : 'notice info',
+      text: authed ? 'Authorized. This window will close by itself.' : 'This page only works inside Trello. Open the board and use the button at the top.' })]));
   }
 
   /* tiny DOM helper */
@@ -292,6 +308,6 @@
     labelHex: labelHex, labelInk: labelInk,
     loadConfig: loadConfig, saveConfig: saveConfig, mergeConfig: mergeConfig, normalizeConfig: normalizeConfig, idOf: idOf,
     baseOf: baseOf, nextIdFor: nextIdFor, buildName: buildName, buildDesc: buildDesc, isUrl: isUrl,
-    isAdmin: isAdmin, ensureAuth: ensureAuth, rest: rest, ops: ops, getT: getT, MockT: MockT, el: el
+    isAdmin: isAdmin, ensureAuth: ensureAuth, rest: rest, ops: ops, getT: getT, renderOutsideTrello: renderOutsideTrello, MockT: MockT, el: el
   };
 })(window);
