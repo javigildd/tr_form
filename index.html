@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Request Form — Power-Up connector</title>
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script src="./js/common.js"></script>
 </head>
 <body>
 <script>
@@ -15,16 +16,13 @@
   var ICON = { dark: BASE + 'icon-dark.svg', light: BASE + 'icon-light.svg' };
 
   function openForm(t) {
-    return t.modal({ url: './form.html', title: 'New request', height: 760, fullscreen: false, accentColor: '#0C66E4' });
+    return t.modal({ url: './form.html', title: 'New request', height: 1000, fullscreen: false, accentColor: '#0C66E4' });
   }
   function openSettings(t) {
-    return t.modal({ url: './settings.html', title: 'Form settings', height: 820, fullscreen: false, accentColor: '#0C66E4' });
+    return t.modal({ url: './settings.html', title: 'Form settings', height: 1000, fullscreen: false, accentColor: '#0C66E4' });
   }
   function isAdmin(t) {
-    return Promise.all([t.member('id'), t.board('memberships')]).then(function (r) {
-      var ms = (r[1] && r[1].memberships) || [];
-      return ms.some(function (m) { return m.idMember === r[0].id && m.memberType === 'admin'; });
-    }).catch(function () { return false; });
+    return RF.loadConfig(t).then(function (cfg) { return RF.isAdmin(t, cfg); }).catch(function () { return false; });
   }
 
   TrelloPowerUp.initialize({

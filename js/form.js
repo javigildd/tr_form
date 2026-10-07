@@ -151,7 +151,12 @@
 
       wrap.appendChild(el('h1', { text: cfg.title }));
       wrap.appendChild(el('p', { class: 'lede', text: 'Creates a card in “' + (destList ? destList.name : '?') + '” with the right labels and the next free ID.' }));
-      [fCover, twoCol, fType].concat(linkFields.map(function (f) { return f.field; })).concat([fNotes]).forEach(function (f) { wrap.appendChild(f); });
+      var linkRows = [];
+      for (var li = 0; li < linkFields.length; li += 2) {
+        var pair = linkFields.slice(li, li + 2).map(function (f) { return f.field; });
+        linkRows.push(pair.length === 2 ? el('div', { class: 'two even' }, pair) : pair[0]);
+      }
+      [fCover, twoCol, fType].concat(linkRows).concat([fNotes]).forEach(function (f) { wrap.appendChild(f); });
       wrap.appendChild(el('div', { class: 'actions' }, [errBox, el('span', { class: 'spacer' }), cancel, submit]));
       root.innerHTML = ''; root.appendChild(wrap); emit();
 

@@ -188,8 +188,8 @@
     var adm = el('input', { type: 'text', id: 's-admins', value: cfg.admins.join(', '), placeholder: 'username1, username2' });
     adm.addEventListener('input', function () { cfg.admins = adm.value.split(/[,\s]+/).map(function (s) { return s.replace(/^@/, '').trim(); }).filter(Boolean); });
     wrap.appendChild(el('div', { class: 'field' }, [
-      el('span', { class: 'lbl', text: 'Board admins always can. Also allow these Trello usernames:' }), adm,
-      el('p', { class: 'hint', text: 'You are signed in as @' + (me.username || '?') + '.' })
+      el('span', { class: 'lbl', text: 'Only these Trello usernames (leave empty to allow every board admin):' }), adm,
+      el('p', { class: 'hint', text: 'You are signed in as @' + (me.username || '?') + '. When this list is set, board admins who are not on it cannot open the settings. If nobody on the list is a member of the board any more, board admins regain access.' })
     ]));
 
     /* Import / export */

@@ -141,13 +141,23 @@
     return out.join('\n').trim();
   }
 
-  /* ---------- who is admin ---------- */
+  /* ---------- who can open the settings ----------
+     If the allow-list in the config is empty: board admins.
+     If it is set: ONLY the listed usernames (board admins are not implied).
+     Safeguard against locking everyone out (e.g. a typo): if none of the listed
+     usernames is currently a member of the board, board admins can open it again. */
+  function norm(s) { return String(s || '').replace(/^@/, '').trim().toLowerCase(); }
   function isAdmin(t, cfg) {
-    return Promise.all([t.member('id', 'username'), t.board('memberships')]).then(function (r) {
-      var me = r[0] || {}, ms = (r[1] && r[1].memberships) || [];
+    return Promise.all([t.member('id', 'username'), t.board('memberships', 'members')]).then(function (r) {
+      var me = r[0] || {}, ms = (r[1] && r[1].memberships) || [], members = (r[1] && r[1].members) || [];
       var mine = ms.filter(function (m) { return m.idMember === me.id; })[0];
-      if (mine && mine.memberType === 'admin') return true;
-      return (cfg.admins || []).map(function (s) { return s.replace(/^@/, '').toLowerCase(); }).indexOf((me.username || '').toLowerCase()) >= 0;
+      var boardAdmin = !!(mine && mine.memberType === 'admin');
+      var allowed = (cfg.admins || []).map(norm).filter(Boolean);
+      if (!allowed.length) return boardAdmin;
+      if (allowed.indexOf(norm(me.username)) >= 0) return true;
+      var onBoard = members.map(function (m) { return norm(m.username); });
+      var anyListedOnBoard = allowed.some(function (u) { return onBoard.indexOf(u) >= 0; });
+      return anyListedOnBoard ? false : boardAdmin;
     }).catch(function () { return false; });
   }
 
