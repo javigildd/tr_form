@@ -167,7 +167,7 @@
     var api = t.getRestApi();
     return api.isAuthorized().then(function (ok) {
       if (ok) return;
-      var base = global.location.href.replace(/[^/]*$/, '');
+      var base = global.location.origin + global.location.pathname.replace(/[^/]*$/, '');
       return api.authorize({ scope: 'read,write', expiration: 'never', returnUrl: base + 'auth.html' });
     });
   }
