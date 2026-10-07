@@ -67,7 +67,9 @@
       cfg.category.hint = str(stored.category.hint, cfg.category.hint);
       if (Array.isArray(stored.category.options) && stored.category.options.length) {
         cfg.category.options = stored.category.options.map(function (o, i) {
-          return { name: str(o && o.name, 'Option ' + (i + 1)), label: str(o && o.label, ''), base: baseOf(o, i) };
+          var opt = { name: str(o && o.name, 'Option ' + (i + 1)), label: str(o && o.label, ''), base: baseOf(o, i) };
+          if (o && Number(o.next) > 0) opt.next = Math.floor(Number(o.next));
+          return opt;
         });
       }
     }
@@ -102,6 +104,9 @@
       o.base = Math.max(100, Math.round((Number(o.base) || (i + 1) * 100) / 100) * 100);
       while (used[o.base]) o.base += 100;
       used[o.base] = true;
+      // Optional "next ID" override: must sit inside the option's block, otherwise it is dropped.
+      var nx = Math.floor(Number(o.next));
+      if (nx > o.base && nx < o.base + 100) o.next = nx; else delete o.next;
     });
     cfg.type.options = cfg.type.options.filter(function (o) { return (o.name || '').trim(); }).map(function (o) { o.name = o.name.trim(); return o; });
     if (!cfg.type.options.length) cfg.type.options = clone(DEFAULTS.type.options);
@@ -122,12 +127,21 @@
   /* Each category option owns a block of 100 IDs starting at its `base` (100, 200, …). */
   function baseOf(opt, i) { var b = Number(opt && opt.base); return b > 0 ? b : (i + 1) * 100; }
   function idOf(name) { var m = /^(\d{3,})[_\s.-]/.exec(name || ''); return m ? Number(m[1]) : null; }
-  /* Next ID = highest ID already on the board within this option's block, plus one. */
-  function nextIdFor(base, cardNames) {
-    var hi = base - 1;
-    (cardNames || []).forEach(function (n) { var v = idOf(n); if (v != null && v >= base && v < base + 100) hi = Math.max(hi, v); });
-    return hi + 1;
+  /* Highest ID already on the board within this option's block, or null if none. */
+  function highestIdIn(base, cardNames) {
+    var hi = null;
+    (cardNames || []).forEach(function (n) { var v = idOf(n); if (v != null && v >= base && v < base + 100 && (hi == null || v > hi)) hi = v; });
+    return hi;
   }
+  /* Next ID = highest ID already on the board within this option's block, plus one.
+     An admin can set a higher "next" in the settings (floor); it never goes below highest + 1, so IDs are never reused. */
+  function nextIdFor(base, cardNames, floor) {
+    var hi = highestIdIn(base, cardNames);
+    var n = hi == null ? base : hi + 1;
+    floor = Math.floor(Number(floor));
+    return floor > n ? floor : n;
+  }
+  function nextIdOf(opt, i, cardNames) { return nextIdFor(baseOf(opt, i), cardNames, opt && opt.next); }
   function buildName(pattern, d) {
     return (pattern || DEFAULTS.pattern).replace(/\{(id|name|category|type)\}/g, function (_, key) { return d[key] == null ? '' : String(d[key]); }).trim();
   }
@@ -307,7 +321,7 @@
     APP_KEY: APP_KEY, APP_NAME: APP_NAME, DEFAULTS: DEFAULTS, MAX_LINKS: MAX_LINKS,
     labelHex: labelHex, labelInk: labelInk,
     loadConfig: loadConfig, saveConfig: saveConfig, mergeConfig: mergeConfig, normalizeConfig: normalizeConfig, idOf: idOf,
-    baseOf: baseOf, nextIdFor: nextIdFor, buildName: buildName, buildDesc: buildDesc, isUrl: isUrl,
+    baseOf: baseOf, nextIdFor: nextIdFor, nextIdOf: nextIdOf, highestIdIn: highestIdIn, buildName: buildName, buildDesc: buildDesc, isUrl: isUrl,
     isAdmin: isAdmin, ensureAuth: ensureAuth, rest: rest, ops: ops, getT: getT, renderOutsideTrello: renderOutsideTrello, MockT: MockT, el: el
   };
 })(window);

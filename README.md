@@ -32,7 +32,7 @@ JSON into *Import / export* and click *Load*, then *Save*. The shape:
   "title": "New request",
   "name": { "label": "Request name", "placeholder": "", "hint": "" },
   "category": { "label": "Category", "hint": "", "options": [
-    { "name": "Category A", "label": "<trello label id>", "base": 100 } ] },
+    { "name": "Category A", "label": "<trello label id>", "base": 100, "next": 120 } ] },
   "type": { "label": "Type", "options": [ { "name": "Type A", "label": "<trello label id>" } ] },
   "links": [ { "label": "Link 1", "placeholder": "https://…", "required": true } ],
   "notes": { "label": "Notes", "placeholder": "", "required": false },
@@ -64,7 +64,8 @@ Keep your real configuration outside the repository (anything under `private/` o
 
 * The API key is public by design (Power-Ups run in the browser). Never put a token in the code.
 * IDs come from the board itself: the form scans every card (including archived) and takes the
-  highest ID in the chosen block plus one. Blocks are editable in settings.
+  highest ID in the chosen block plus one. Blocks are editable in settings, and the *Next IDs*
+  section lets an admin skip ahead (`next`); it can never go below an ID that already exists.
 * Settings visibility is enforced in the UI (board admins or allow-listed usernames). The config
   contains no secrets.
 * Each board keeps its own settings and IDs, so the Power-Up can be added to several boards.

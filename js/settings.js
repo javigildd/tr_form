@@ -86,17 +86,15 @@
       cfg.category.options.forEach(function (o, i) {
         var name = textInput(o, 'name', { 'aria-label': 'Option ' + (i + 1) + ' name' });
         var base = el('input', { type: 'number', class: 'small', min: '100', step: '100', value: String(R.baseOf(o, i)), 'aria-label': 'ID block for option ' + (i + 1), title: 'ID block (first ID of the range)' });
-        var nxt = el('span', { class: 'readonly fixed', title: 'Next ID for this option' });
-        function paintNext() { nxt.textContent = 'next ' + R.nextIdFor(R.baseOf(o, i), names); }
-        base.addEventListener('input', function () { o.base = Number(base.value) || (i + 1) * 100; paintNext(); });
-        paintNext();
+        name.addEventListener('input', drawNextIds);
+        base.addEventListener('input', function () { o.base = Number(base.value) || (i + 1) * 100; drawNextIds(); });
         var rm = el('button', { type: 'button', class: 'btn small danger fixed', text: 'Remove', disabled: cfg.category.options.length <= 1 ? 'disabled' : false });
         rm.addEventListener('click', function () { cfg.category.options.splice(i, 1); drawCategories(); });
         cRows.appendChild(el('div', { class: 'row' }, [
           el('span', { class: 'idx', text: String(i + 1) }), name,
           labelPicker(labels, o.label, function (v) { o.label = v; }),
           el('span', { class: 'fixed row' }, [el('span', { class: 'muted', text: 'IDs from' }), base]),
-          nxt, rm
+          rm
         ]));
       });
       var add = el('button', { type: 'button', class: 'btn small', text: '+ Add option' });
@@ -106,9 +104,41 @@
         cfg.category.options.push({ name: 'New option', label: '', base: b }); drawCategories();
       });
       cRows.appendChild(el('div', {}, [add]));
+      drawNextIds();
+    }
+
+    /* Next IDs: what the form will assign next for each option, with an optional override. */
+    var nRows = el('div', { class: 'grid-rows' });
+    function drawNextIds() {
+      nRows.innerHTML = '';
+      cfg.category.options.forEach(function (o, i) {
+        var base = R.baseOf(o, i), hi = R.highestIdIn(base, names), auto = hi == null ? base : hi + 1;
+        var inp = el('input', { type: 'number', class: 'small', min: String(auto), max: String(base + 99), step: '1', value: String(R.nextIdOf(o, i, names)), 'aria-label': 'Next ID for ' + (o.name || 'option ' + (i + 1)) });
+        var eff = el('span', { class: 'readonly fixed' });
+        function paint() {
+          var v = Math.floor(Number(inp.value));
+          if (v > auto && v < base + 100) o.next = v; else delete o.next;
+          var n = R.nextIdOf(o, i, names);
+          eff.textContent = 'will use ' + n;
+          eff.title = v < auto ? 'Cannot go below ' + auto + ': ' + (hi == null ? 'the block starts at ' + base : hi + ' is already on the board') : '';
+          eff.style.color = (v && v !== n) ? 'var(--danger)' : '';
+        }
+        inp.addEventListener('input', paint); paint();
+        nRows.appendChild(el('div', { class: 'row' }, [
+          el('span', { class: 'idx', text: String(i + 1) }),
+          el('span', { class: 't-name', text: o.name || 'Option ' + (i + 1) }),
+          el('span', { class: 'muted fixed', text: hi == null ? 'nothing on the board yet (block ' + base + '–' + (base + 99) + ')' : 'highest on the board: ' + hi }),
+          el('span', { class: 'fixed row' }, [el('span', { class: 'muted', text: 'Next ID' }), inp]),
+          eff
+        ]));
+      });
     }
     drawCategories();
     wrap.appendChild(cRows);
+
+    wrap.appendChild(el('h2', { text: 'Next IDs' }));
+    wrap.appendChild(el('p', { class: 'hint', text: 'What the form will assign next for each option: the highest ID already on the board in that block, plus one. Type a higher number to skip ahead. It can never go below an ID that already exists, so numbers are never reused. Archived cards count too.' }));
+    wrap.appendChild(nRows);
 
     /* Types */
     wrap.appendChild(el('h2', { text: 'Type buttons' }));
@@ -177,7 +207,7 @@
     var ex = el('p', { class: 'hint' });
     function paintEx() {
       var o = cfg.category.options[0] || {}, ty = cfg.type.options[0] || {};
-      ex.textContent = 'Example: ' + R.buildName(pat.value, { id: R.nextIdFor(R.baseOf(o, 0), names), name: 'Example request', category: o.name || '', type: ty.name || '' });
+      ex.textContent = 'Example: ' + R.buildName(pat.value, { id: R.nextIdOf(o, 0, names), name: 'Example request', category: o.name || '', type: ty.name || '' });
     }
     pat.addEventListener('input', function () { cfg.pattern = pat.value; paintEx(); });
     paintEx();

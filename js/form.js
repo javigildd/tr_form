@@ -177,7 +177,7 @@
         R.ensureAuth(t)
           .then(function () { return R.ops.cardNames(t); })            // fresh scan right before creating
           .then(function (names) {
-            finalId = R.nextIdFor(R.baseOf(cat, state.category), names);
+            finalId = R.nextIdOf(cat, state.category, names);
             finalName = R.buildName(cfg.pattern, { id: finalId, name: nameIn.value.trim(), category: cat.name, type: ty.name });
             var idLabels = [cat.label, ty.label].filter(function (id) { return id && labelById[id]; });
             return R.ops.createCard(t, { idList: destList.id, name: finalName, idLabels: idLabels,
