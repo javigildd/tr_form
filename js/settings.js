@@ -59,7 +59,7 @@
 
   function renderEditor(root, t, cfg, labels, lists, cards, me, opts) {
     var wrap = el('div', { class: 'pu' });
-    function names() { return R.countedNames(cards, cfg); }
+    function counted() { return R.countedCards(cards, cfg); }
     wrap.appendChild(el('h1', { text: 'Form settings' }));
     wrap.appendChild(el('p', { class: 'lede', text: 'Changes apply to everyone on this board as soon as you save. Nothing here is stored outside Trello.' }));
 
@@ -80,7 +80,7 @@
       labelled('Selector label', textInput(cfg.category, 'label')),
       labelled('Note under the selector', textInput(cfg.category, 'hint'))
     ]));
-    wrap.appendChild(el('p', { class: 'hint', text: 'The name is what people see in the selector; the label is what gets applied to the card. Each option owns a block of 100 IDs starting at “IDs from”. The next ID is always the highest one already on the board in that block, plus one.' }));
+    wrap.appendChild(el('p', { class: 'hint', text: 'The name is what people see in the selector; the label is what gets applied to the card. Each option owns a block of 100 IDs starting at “IDs from”. By default the next ID is the highest one already on the board in that block, plus one; see Next IDs below.' }));
     var cRows = el('div', { class: 'grid-rows' });
     function drawCategories() {
       cRows.innerHTML = '';
@@ -108,34 +108,43 @@
       drawNextIds();
     }
 
-    /* Next IDs: what the form will assign next for each option, with an optional "start from" value. */
+    /* Next IDs: what the form will assign next for each option, with a counter the admin can reset. */
     var nRows = el('div', { class: 'grid-rows' });
     function drawNextIds() {
       nRows.innerHTML = '';
-      var ns = names();
+      var pool = counted();
       cfg.category.options.forEach(function (o, i) {
-        var base = R.baseOf(o, i), hi = R.highestIdIn(base, ns), used = R.usedIdsIn(base, ns);
-        var archivedInBlock = cards.filter(function (c) { return c.closed; }).map(function (c) { return R.idOf(c.name); }).filter(function (v) { return v != null && v >= base && v < base + 100; }).length;
-        var auto = R.nextIdFor(base, ns);   // what the form uses with no start value: highest + 1
-        var inp = el('input', { type: 'number', class: 'small', min: String(base), max: String(base + 99), step: '1', value: String(o.next >= base ? o.next : auto), 'aria-label': 'Next ID for ' + (o.name || 'option ' + (i + 1)) });
+        var base = R.baseOf(o, i), hi = R.highestIdIn(base, pool), orig = R.resetOf(o);
+        var inBlock = pool.filter(function (c) { var v = R.idOf(c.name); return v != null && v >= base && v < base + 100; });
+        var archived = cards.filter(function (c) { var v = R.idOf(c.name); return c.closed && v != null && v >= base && v < base + 100; }).length;   // from every card, so ignored ones are still reported
+        var effective = R.nextIdOf(o, i, pool);   // what the form hands out right now
+        var inp = el('input', { type: 'number', class: 'small', min: String(base), max: String(base + 99), step: '1', value: String(effective), 'aria-label': 'Next ID for ' + (o.name || 'option ' + (i + 1)) });
         var eff = el('span', { class: 'readonly fixed' });
         var reset = el('button', { type: 'button', class: 'btn small fixed', text: 'Reset to ' + base, title: 'Start again from the first number of the block' });
         function paint() {
-          var v = Math.floor(Number(inp.value));
-          // Store a start value only when it changes the outcome; otherwise keep the default rule (highest + 1).
-          if (v >= base && v < base + 100 && R.nextIdFor(base, ns, v) !== auto) o.next = v; else delete o.next;
-          var n = R.nextIdOf(o, i, ns);
-          eff.textContent = 'will use ' + n;
-          eff.title = (v >= base && v !== n) ? v + ' is already used, so the first free number from ' + v + ' upwards is ' + n : '';
-          eff.style.color = (v >= base && v !== n) ? 'var(--danger)' : '';
+          var v = Math.floor(Number(inp.value)), ok = v >= base && v < base + 100;
+          // A different number is a new counter reset, stamped with the current time; otherwise keep what was stored.
+          if (ok && v !== effective) { o.next = v; o.since = Math.floor(Date.now() / 1000); }
+          else if (orig) { o.next = orig.next; o.since = orig.since; }
+          else { delete o.next; delete o.since; }
+          var n = R.nextIdOf(o, i, pool);
+          var above = (ok && v !== effective) ? inBlock.filter(function (c) { return R.idOf(c.name) >= v; }).length : 0;
+          eff.textContent = !ok ? 'use ' + base + '–' + (base + 99) : 'will use ' + n + (above ? ' · ' + above + ' higher card' + (above === 1 ? '' : 's') + ' ignored' : '');
+          eff.title = above ? above + ' card' + (above === 1 ? '' : 's') + ' in this block already carr' + (above === 1 ? 'ies ' : 'y ') + v + ' or higher. From now on they do not count, so numbers can repeat unless you delete or rename them.' : '';
+          eff.style.color = (!ok || above) ? 'var(--danger)' : '';
         }
         inp.addEventListener('input', paint); paint();
         reset.addEventListener('click', function () { inp.value = String(base); paint(); });
-        var state = hi == null ? 'nothing on the board yet (' + base + '–' + (base + 99) + ')' : 'highest on the board: ' + hi + (archivedInBlock ? ' · ' + archivedInBlock + ' archived ' + (cfg.ids.countArchived ? 'counted' : 'ignored') : '');
+        var bits = [hi == null ? 'nothing on the board yet (' + base + '–' + (base + 99) + ')' : 'highest on the board: ' + hi];
+        if (archived) bits.push(archived + ' archived ' + (cfg.ids.countArchived ? 'counted' : 'ignored'));
+        if (orig) {
+          var before = inBlock.filter(function (c) { return R.createdAt(c) < orig.since; }).length;
+          bits.push('reset to ' + orig.next + (orig.since ? ' on ' + new Date(orig.since * 1000).toLocaleDateString() : '') + (before ? ', ' + before + ' earlier card' + (before === 1 ? '' : 's') + ' ignored' : ''));
+        }
         nRows.appendChild(el('div', { class: 'row' }, [
           el('span', { class: 'idx', text: String(i + 1) }),
           el('span', { class: 't-name', text: o.name || 'Option ' + (i + 1) }),
-          el('span', { class: 'muted', text: state, style: 'font-size:12px' }),
+          el('span', { class: 'muted', text: bits.join(' · '), style: 'font-size:12px' }),
           el('span', { class: 'fixed row' }, [el('span', { class: 'muted', text: 'Next ID' }), inp]),
           eff, reset
         ]));
@@ -145,7 +154,7 @@
     wrap.appendChild(cRows);
 
     wrap.appendChild(el('h2', { text: 'Next IDs' }));
-    wrap.appendChild(el('p', { class: 'hint', text: 'By default the next ID is the highest one already on the board in that block, plus one. Type any number of the block to start from there: the form takes the first free number from it upwards, so an ID that is in use is never handed out twice. To reuse numbers, archive or delete the cards that hold them.' }));
+    wrap.appendChild(el('p', { class: 'hint', text: 'By default the next ID is the highest one already on the board in that block, plus one. Type another number to reset the counter: the next card gets exactly that number and numbering continues from there. Cards created before a reset no longer count, so their numbers can come up again unless you delete or rename them.' }));
     var arch = el('select', { 'aria-label': 'Archived cards', class: 'fixed' }, [el('option', { value: 'count', text: 'Count archived cards' }), el('option', { value: 'ignore', text: 'Ignore archived cards' })]);
     arch.value = cfg.ids.countArchived ? 'count' : 'ignore';
     arch.addEventListener('change', function () { cfg.ids.countArchived = arch.value === 'count'; drawNextIds(); paintEx(); });
@@ -219,7 +228,7 @@
     var ex = el('p', { class: 'hint' });
     function paintEx() {
       var o = cfg.category.options[0] || {}, ty = cfg.type.options[0] || {};
-      ex.textContent = 'Example: ' + R.buildName(pat.value, { id: R.nextIdOf(o, 0, names()), name: 'Example request', category: o.name || '', type: ty.name || '' });
+      ex.textContent = 'Example: ' + R.buildName(pat.value, { id: R.nextIdOf(o, 0, counted()), name: 'Example request', category: o.name || '', type: ty.name || '' });
     }
     pat.addEventListener('input', function () { cfg.pattern = pat.value; paintEx(); });
     paintEx();

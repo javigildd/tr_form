@@ -32,7 +32,7 @@ JSON into *Import / export* and click *Load*, then *Save*. The shape:
   "title": "New request",
   "name": { "label": "Request name", "placeholder": "", "hint": "" },
   "category": { "label": "Category", "hint": "", "options": [
-    { "name": "Category A", "label": "<trello label id>", "base": 100, "next": 120 } ] },
+    { "name": "Category A", "label": "<trello label id>", "base": 100, "next": 120, "since": 1760000000 } ] },
   "type": { "label": "Type", "options": [ { "name": "Type A", "label": "<trello label id>" } ] },
   "links": [ { "label": "Link 1", "placeholder": "https://…", "required": true } ],
   "notes": { "label": "Notes", "placeholder": "", "required": false },
@@ -66,9 +66,9 @@ Keep your real configuration outside the repository (anything under `private/` o
 * The API key is public by design (Power-Ups run in the browser). Never put a token in the code.
 * IDs come from the board itself: the form scans every card (including archived) and takes the
   highest ID in the chosen block plus one. Blocks are editable in settings. In the *Next IDs*
-  section an admin can set a start value per option (`next`): the form then uses the first free
-  number from it upwards, so an ID in use is never handed out twice. Archived cards count unless
-  `ids.countArchived` is false.
+  section an admin can reset the counter of an option (`next`, stamped with `since`): the next
+  card gets exactly that number and numbering continues from there; cards created before the
+  reset no longer count. Archived cards count unless `ids.countArchived` is false.
 * Settings visibility is enforced in the UI (board admins or allow-listed usernames). The config
   contains no secrets.
 * Each board keeps its own settings and IDs, so the Power-Up can be added to several boards.

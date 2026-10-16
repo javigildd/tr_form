@@ -68,8 +68,8 @@
       cfg.category.hint = str(stored.category.hint, cfg.category.hint);
       if (Array.isArray(stored.category.options) && stored.category.options.length) {
         cfg.category.options = stored.category.options.map(function (o, i) {
-          var opt = { name: str(o && o.name, 'Option ' + (i + 1)), label: str(o && o.label, ''), base: baseOf(o, i) };
-          if (o && Number(o.next) > 0) opt.next = Math.floor(Number(o.next));
+          var opt = { name: str(o && o.name, 'Option ' + (i + 1)), label: str(o && o.label, ''), base: baseOf(o, i) }, r = resetOf(o);
+          if (r) { opt.next = r.next; opt.since = r.since; }
           return opt;
         });
       }
@@ -106,9 +106,9 @@
       o.base = Math.max(100, Math.round((Number(o.base) || (i + 1) * 100) / 100) * 100);
       while (used[o.base]) o.base += 100;
       used[o.base] = true;
-      // Optional "start from" value for the next ID: must sit inside the option's block, otherwise it is dropped.
-      var nx = Math.floor(Number(o.next));
-      if (nx >= o.base && nx < o.base + 100) o.next = nx; else delete o.next;
+      // Optional counter reset: must sit inside the option's block, otherwise it is dropped.
+      var r = resetOf(o);
+      if (r && inBlock(r.next, o.base)) { o.next = r.next; o.since = r.since; } else { delete o.next; delete o.since; }
     });
     cfg.type.options = cfg.type.options.filter(function (o) { return (o.name || '').trim(); }).map(function (o) { o.name = o.name.trim(); return o; });
     if (!cfg.type.options.length) cfg.type.options = clone(DEFAULTS.type.options);
@@ -129,40 +129,48 @@
   /* Each category option owns a block of 100 IDs starting at its `base` (100, 200, …). */
   function baseOf(opt, i) { var b = Number(opt && opt.base); return b > 0 ? b : (i + 1) * 100; }
   function idOf(name) { var m = /^(\d{3,})[_\s.-]/.exec(name || ''); return m ? Number(m[1]) : null; }
-  /* Highest ID already on the board within this option's block, or null if none. */
-  function highestIdIn(base, cardNames) {
+  function nameOf(c) { return typeof c === 'string' ? c : (c && c.name) || ''; }
+  function inBlock(v, base) { return v != null && v >= base && v < base + 100; }
+  /* When a card was created, in seconds: Trello ids start with the creation time in hex. 0 when unknown. */
+  function createdAt(c) { var id = c && c.id; return /^[0-9a-f]{24}$/i.test(id || '') ? parseInt(id.slice(0, 8), 16) : 0; }
+  /* Highest ID already on the board within this option's block, or null if none. Takes cards or names. */
+  function highestIdIn(base, cards) {
     var hi = null;
-    (cardNames || []).forEach(function (n) { var v = idOf(n); if (v != null && v >= base && v < base + 100 && (hi == null || v > hi)) hi = v; });
+    (cards || []).forEach(function (c) { var v = idOf(nameOf(c)); if (inBlock(v, base) && (hi == null || v > hi)) hi = v; });
     return hi;
   }
   /* Set of IDs in use within a block. */
-  function usedIdsIn(base, cardNames) {
+  function usedIdsIn(base, cards) {
     var used = {};
-    (cardNames || []).forEach(function (n) { var v = idOf(n); if (v != null && v >= base && v < base + 100) used[v] = true; });
+    (cards || []).forEach(function (c) { var v = idOf(nameOf(c)); if (inBlock(v, base)) used[v] = true; });
     return used;
   }
-  /* Next ID. Default: the highest ID already on the board within this option's block, plus one.
-     If an admin set a "start from" value in the settings, the next ID is the first number from
-     that value upwards that no counted card uses. Either way an ID in use is never handed out again. */
-  function nextIdFor(base, cardNames, start) {
-    start = Math.floor(Number(start));
-    if (!(start >= base && start < base + 100)) {
-      var hi = highestIdIn(base, cardNames);
-      return hi == null ? base : hi + 1;
-    }
-    var used = usedIdsIn(base, cardNames), n = start;
-    while (used[n]) n++;
-    return n;
+  /* The counter reset stored on an option, if any: { next, since } (since = when it was set, in seconds). */
+  function resetOf(opt) {
+    var n = Math.floor(Number(opt && opt.next)), s = Math.floor(Number(opt && opt.since));
+    return n > 0 ? { next: n, since: s > 0 ? s : 0 } : null;
   }
-  function nextIdOf(opt, i, cardNames) { return nextIdFor(baseOf(opt, i), cardNames, opt && opt.next); }
+  /* Next ID for a block. Default: the highest ID already on the board within the block, plus one.
+     After an admin resets the counter to N in the settings, cards created before that reset no longer
+     count: the next ID is N, then the highest ID among the cards created since the reset, plus one. */
+  function nextIdFor(base, cards, reset) {
+    if (reset && !inBlock(reset.next, base)) reset = null;
+    var pool = reset ? (cards || []).filter(function (c) { return createdAt(c) >= reset.since; }) : cards;
+    var hi = highestIdIn(base, pool);
+    if (!reset) return hi == null ? base : hi + 1;
+    return hi == null ? reset.next : Math.max(reset.next, hi + 1);
+  }
+  function nextIdOf(opt, i, cards) { return nextIdFor(baseOf(opt, i), cards, resetOf(opt)); }
   function buildName(pattern, d) {
     return (pattern || DEFAULTS.pattern).replace(/\{(id|name|category|type)\}/g, function (_, key) { return d[key] == null ? '' : String(d[key]); }).trim();
   }
   function isUrl(s) { return /^https?:\/\/\S+$/i.test((s || '').trim()); }
-  function countedNames(cards, cfg) {
+  /* Cards that count for ID purposes (archived ones only if the config says so). */
+  function countedCards(cards, cfg) {
     var countArchived = !cfg || !cfg.ids || cfg.ids.countArchived !== false;
-    return (cards || []).filter(function (c) { return countArchived || !c.closed; }).map(function (c) { return c.name; });
+    return (cards || []).filter(function (c) { return countArchived || !c.closed; });
   }
+  function countedNames(cards, cfg) { return countedCards(cards, cfg).map(nameOf); }
 
   /* Card description: a summary line, then one section per filled-in link and the notes. */
   function buildDesc(cfg, d) {
@@ -217,17 +225,19 @@
 
   /* Board operations, real or mock. */
   var ops = {
-    /* Every card on the board (open and archived) as { name, closed }. */
+    /* Every card on the board (open and archived) as { id, name, closed }. */
     cards: function (t) {
-      if (t.__mock) return Promise.resolve(t.store.cards.map(function (c) { return { name: c.name, closed: !!c.closed }; }));
+      function pick(c) { return { id: c.id, name: c.name, closed: !!c.closed }; }
+      if (t.__mock) return Promise.resolve(t.store.cards.map(pick));
       return t.board('id').then(function (b) { return rest(t, 'GET', '/boards/' + b.id + '/cards/all', { fields: 'name,closed' }); })
-        .then(function (cards) { return cards.map(function (c) { return { name: c.name, closed: !!c.closed }; }); });
+        .then(function (cards) { return cards.map(pick); });
     },
-    /* Names of the cards that count for ID purposes (archived ones only if the config says so). */
-    cardNames: function (t, cfg) { return ops.cards(t).then(function (cards) { return countedNames(cards, cfg); }); },
+    /* Cards that count for ID purposes (archived ones only if the config says so). */
+    countedCards: function (t, cfg) { return ops.cards(t).then(function (cards) { return countedCards(cards, cfg); }); },
+    cardNames: function (t, cfg) { return ops.countedCards(t, cfg).then(function (cards) { return cards.map(nameOf); }); },
     createCard: function (t, data) {
       if (t.__mock) {
-        var card = { id: 'c' + Date.now(), name: data.name, desc: data.desc, idList: data.idList,
+        var card = { id: mockId(), name: data.name, desc: data.desc, idList: data.idList,
           idLabels: data.idLabels, attachments: [], cover: null, url: '#', shortUrl: '#', created: new Date().toISOString() };
         t.store.cards.unshift(card); t.persist();
         return Promise.resolve(card);
@@ -259,6 +269,8 @@
 
   /* ---------- Mock Trello client for the preview ---------- */
   var MOCK_KEY = 'request-form-powerup.demo.v4';
+  /* Demo card ids look like Trello's: creation time in hex, then random hex. */
+  function mockId() { var s = Math.floor(Date.now() / 1000).toString(16); while (s.length < 8) s = '0' + s; for (var i = 0; i < 16; i++) s += Math.floor(Math.random() * 16).toString(16); return s; }
   var MOCK_LABELS = [
     ['Category A', 'orange_dark'], ['Category B', 'lime_dark'], ['Category C', 'purple_dark'],
     ['Type A', 'red_light'], ['Type B', 'red'], ['Type C', 'blue']
@@ -341,7 +353,8 @@
     APP_KEY: APP_KEY, APP_NAME: APP_NAME, DEFAULTS: DEFAULTS, MAX_LINKS: MAX_LINKS,
     labelHex: labelHex, labelInk: labelInk,
     loadConfig: loadConfig, saveConfig: saveConfig, mergeConfig: mergeConfig, normalizeConfig: normalizeConfig, idOf: idOf,
-    baseOf: baseOf, nextIdFor: nextIdFor, nextIdOf: nextIdOf, highestIdIn: highestIdIn, usedIdsIn: usedIdsIn, countedNames: countedNames, buildName: buildName, buildDesc: buildDesc, isUrl: isUrl,
+    baseOf: baseOf, createdAt: createdAt, resetOf: resetOf, nextIdFor: nextIdFor, nextIdOf: nextIdOf, highestIdIn: highestIdIn, usedIdsIn: usedIdsIn,
+    countedCards: countedCards, countedNames: countedNames, buildName: buildName, buildDesc: buildDesc, isUrl: isUrl,
     isAdmin: isAdmin, ensureAuth: ensureAuth, rest: rest, ops: ops, getT: getT, renderOutsideTrello: renderOutsideTrello, MockT: MockT, el: el
   };
 })(window);
