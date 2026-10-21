@@ -32,7 +32,11 @@ JSON into *Import / export* and click *Load*, then *Save*. The shape:
   "title": "New request",
   "name": { "label": "Request name", "placeholder": "", "hint": "" },
   "category": { "label": "Category", "hint": "", "options": [
-    { "name": "Category A", "label": "<trello label id>", "base": 100, "next": 120, "since": 1760000000 } ] },
+    { "name": "Category A", "label": "<trello label id>", "base": 100, "next": 120, "since": 1760000000 },
+    { "name": "Category B", "label": "<trello label id>", "base": 9000,
+      "sub": { "label": "Which one?", "options": [
+        { "name": "Entry 1", "label": "", "base": 9100, "enabled": true },
+        { "name": "Entry 2", "label": "", "base": 9200, "enabled": false } ] } } ] },
   "type": { "label": "Type", "options": [ { "name": "Type A", "label": "<trello label id>" } ] },
   "links": [ { "label": "Link 1", "placeholder": "https://…", "required": true } ],
   "notes": { "label": "Notes", "placeholder": "", "required": false },
@@ -69,6 +73,11 @@ Keep your real configuration outside the repository (anything under `private/` o
   section an admin can reset the counter of an option (`next`, stamped with `since`): the next
   card gets exactly that number and numbering continues from there; cards created before the
   reset no longer count. Archived cards count unless `ids.countArchived` is false.
+* An option can carry a **sub-list** (`sub`): when someone picks that option, the form shows a
+  second selector with the entries that are enabled, and the card takes its ID from the chosen
+  entry's own block (the option's block is then unused). Entries can be switched on and off in
+  the settings without losing their names or IDs; an option whose sub-list has nothing enabled
+  is hidden from the form. `{sub}` is available in the card name pattern.
 * Settings visibility is enforced in the UI (board admins or allow-listed usernames). The config
   contains no secrets.
 * Each board keeps its own settings and IDs, so the Power-Up can be added to several boards.

@@ -1,5 +1,5 @@
 <title>Request Form</title>
-<link rel="stylesheet" href="./css/powerup.css?v=20261016a">
+<link rel="stylesheet" href="./css/powerup.css?v=20261021a">
 <style>
   body { background: var(--bg); background-image: radial-gradient(900px 400px at 15% -10%, rgba(79,141,255,.18), transparent 60%); }
   .shell { max-width: 1120px; margin: 0 auto; padding-block: 20px 40px; padding-inline: 16px; }
@@ -98,9 +98,9 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="./js/common.js?v=20261016a"></script>
-<script src="./js/form.js?v=20261016a"></script>
-<script src="./js/settings.js?v=20261016a"></script>
+<script src="./js/common.js?v=20261021a"></script>
+<script src="./js/form.js?v=20261021a"></script>
+<script src="./js/settings.js?v=20261021a"></script>
 <script>
 (function () {
   var t = new RF.MockT();
@@ -135,7 +135,7 @@
     var parts = d.cardName.split(d.idMask);
     var tn = E('div', { class: 'tn' }, [parts[0] ? E('span', { text: parts[0] }) : null, E('span', { class: 'id', text: d.idMask }), E('span', { class: d.name ? '' : 'ph', text: parts.slice(1).join(d.idMask) })]);
     function line(k, v, cls) { return E('div', { class: 'ln' }, [E('span', { class: 'k', text: k }), E('span', { class: 'v ' + (v ? '' : 'ph ') + (cls || ''), text: v || '—' })]); }
-    var td = E('div', { class: 'td' }, [line(d.categoryLabel, d.category), line(d.typeLabel, d.type)]
+    var td = E('div', { class: 'td' }, [line(d.categoryLabel, d.category), d.subLabel ? line(d.subLabel, d.sub) : null, line(d.typeLabel, d.type)]
       .concat(d.links.map(function (l) { return line(l.label, l.value); }))
       .concat([d.notes ? line(d.notesLabel, d.notes, 'notes') : null]));
     var imgs = E('div', { class: 'imgs' });

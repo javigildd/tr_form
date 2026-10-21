@@ -11,7 +11,7 @@
   var APP_KEY = 'aeb7699b59456bf69ed953440b998eef';
   var APP_NAME = 'Request Form';
   var CFG_KEY = 'cfg';   // board/shared pluginData key for configuration
-  var CFG_VERSION = 2;
+  var CFG_VERSION = 3;
   var MAX_LINKS = 4;
 
   var DEFAULTS = {
@@ -68,8 +68,9 @@
       cfg.category.hint = str(stored.category.hint, cfg.category.hint);
       if (Array.isArray(stored.category.options) && stored.category.options.length) {
         cfg.category.options = stored.category.options.map(function (o, i) {
-          var opt = { name: str(o && o.name, 'Option ' + (i + 1)), label: str(o && o.label, ''), base: baseOf(o, i) }, r = resetOf(o);
+          var opt = { name: str(o && o.name, 'Option ' + (i + 1)), label: str(o && o.label, ''), base: baseOf(o, i) }, r = resetOf(o), sub = mergeSub(o && o.sub);
           if (r) { opt.next = r.next; opt.since = r.since; }
+          if (sub) opt.sub = sub;
           return opt;
         });
       }
@@ -96,19 +97,39 @@
     if (Array.isArray(stored.admins)) cfg.admins = stored.admins.filter(function (s) { return typeof s === 'string'; });
     return cfg;
   }
+  /* A sub-list under a category option: a second selector the form shows when that option is chosen.
+     Each enabled entry owns its own ID block. { label, options: [{ name, label, base, enabled, next?, since? }] } */
+  function mergeSub(s) {
+    if (!s || typeof s !== 'object' || !Array.isArray(s.options)) return null;
+    return {
+      label: str(s.label, 'Which one?'),
+      options: s.options.map(function (o, i) {
+        var so = { name: str(o && o.name, 'Entry ' + (i + 1)), label: str(o && o.label, ''), base: Number(o && o.base) > 0 ? Math.floor(Number(o.base)) : 0, enabled: !!(o && o.enabled) }, r = resetOf(o);
+        if (r) { so.next = r.next; so.since = r.since; }
+        return so;
+      })
+    };
+  }
   /* Tidy a config before saving: trim names, snap ID blocks to multiples of 100, never let two options share a block. */
   function normalizeConfig(cfg) {
     var used = {};
+    function claim(b) { b = Math.max(100, Math.round(b / 100) * 100); while (used[b]) b += 100; used[b] = true; return b; }
+    // Optional counter reset: must sit inside the option's block, otherwise it is dropped.
+    function keepReset(o) { var r = resetOf(o); if (r && inBlock(r.next, o.base)) { o.next = r.next; o.since = r.since; } else { delete o.next; delete o.since; } }
     cfg.category.options = cfg.category.options.filter(function (o) { return (o.name || '').trim(); });
     if (!cfg.category.options.length) cfg.category.options = clone(DEFAULTS.category.options);
-    cfg.category.options.forEach(function (o, i) {
-      o.name = o.name.trim();
-      o.base = Math.max(100, Math.round((Number(o.base) || (i + 1) * 100) / 100) * 100);
-      while (used[o.base]) o.base += 100;
-      used[o.base] = true;
-      // Optional counter reset: must sit inside the option's block, otherwise it is dropped.
-      var r = resetOf(o);
-      if (r && inBlock(r.next, o.base)) { o.next = r.next; o.since = r.since; } else { delete o.next; delete o.since; }
+    cfg.category.options.forEach(function (o, i) { o.name = o.name.trim(); o.base = claim(Number(o.base) || (i + 1) * 100); keepReset(o); });
+    cfg.category.options.forEach(function (o) {
+      if (o.sub) {
+        o.sub.label = (o.sub.label || '').trim() || 'Which one?';
+        o.sub.options = (o.sub.options || []).filter(function (s) { return (s.name || '').trim(); });
+        o.sub.options.forEach(function (s, j) {
+          s.name = s.name.trim(); s.enabled = !!s.enabled;
+          s.base = claim(Number(s.base) || o.base + (j + 1) * 100);   // entries default to the blocks right after their option
+          keepReset(s);
+        });
+        if (!o.sub.options.length) delete o.sub;
+      }
     });
     cfg.type.options = cfg.type.options.filter(function (o) { return (o.name || '').trim(); }).map(function (o) { o.name = o.name.trim(); return o; });
     if (!cfg.type.options.length) cfg.type.options = clone(DEFAULTS.type.options);
@@ -161,8 +182,12 @@
     return hi == null ? reset.next : Math.max(reset.next, hi + 1);
   }
   function nextIdOf(opt, i, cards) { return nextIdFor(baseOf(opt, i), cards, resetOf(opt)); }
+  /* Entries of an option's sub-list that the form offers. */
+  function enabledSubs(opt) { return opt && opt.sub ? opt.sub.options.filter(function (s) { return s.enabled; }) : []; }
+  /* An option can be chosen in the form unless it has a sub-list with nothing enabled. */
+  function selectable(opt) { return !(opt && opt.sub) || enabledSubs(opt).length > 0; }
   function buildName(pattern, d) {
-    return (pattern || DEFAULTS.pattern).replace(/\{(id|name|category|type)\}/g, function (_, key) { return d[key] == null ? '' : String(d[key]); }).trim();
+    return (pattern || DEFAULTS.pattern).replace(/\{(id|name|category|sub|type)\}/g, function (_, key) { return d[key] == null ? '' : String(d[key]); }).trim();
   }
   function isUrl(s) { return /^https?:\/\/\S+$/i.test((s || '').trim()); }
   /* Cards that count for ID purposes (archived ones only if the config says so). */
@@ -174,7 +199,7 @@
 
   /* Card description: a summary line, then one section per filled-in link and the notes. */
   function buildDesc(cfg, d) {
-    var out = ['**' + cfg.category.label + ':** ' + d.category + ' · **' + cfg.type.label + ':** ' + d.type, ''];
+    var out = ['**' + cfg.category.label + ':** ' + d.category + (d.sub ? ' · **' + d.subLabel + ':** ' + d.sub : '') + ' · **' + cfg.type.label + ':** ' + d.type, ''];
     (d.links || []).forEach(function (l) { if (l.value) { out.push('### ' + l.label); out.push(l.value); out.push(''); } });
     if (d.notes) { out.push('### ' + cfg.notes.label); out.push(d.notes); out.push(''); }
     return out.join('\n').trim();
@@ -354,7 +379,7 @@
     labelHex: labelHex, labelInk: labelInk,
     loadConfig: loadConfig, saveConfig: saveConfig, mergeConfig: mergeConfig, normalizeConfig: normalizeConfig, idOf: idOf,
     baseOf: baseOf, createdAt: createdAt, resetOf: resetOf, nextIdFor: nextIdFor, nextIdOf: nextIdOf, highestIdIn: highestIdIn, usedIdsIn: usedIdsIn,
-    countedCards: countedCards, countedNames: countedNames, buildName: buildName, buildDesc: buildDesc, isUrl: isUrl,
+    countedCards: countedCards, countedNames: countedNames, enabledSubs: enabledSubs, selectable: selectable, buildName: buildName, buildDesc: buildDesc, isUrl: isUrl,
     isAdmin: isAdmin, ensureAuth: ensureAuth, rest: rest, ops: ops, getT: getT, renderOutsideTrello: renderOutsideTrello, MockT: MockT, el: el
   };
 })(window);

@@ -80,23 +80,68 @@
       labelled('Selector label', textInput(cfg.category, 'label')),
       labelled('Note under the selector', textInput(cfg.category, 'hint'))
     ]));
-    wrap.appendChild(el('p', { class: 'hint', text: 'The name is what people see in the selector; the label is what gets applied to the card. Each option owns a block of 100 IDs starting at “IDs from”. By default the next ID is the highest one already on the board in that block, plus one; see Next IDs below.' }));
+    wrap.appendChild(el('p', { class: 'hint', text: 'The name is what people see in the selector; the label is what gets applied to the card. Each option owns a block of 100 IDs starting at “IDs from”. By default the next ID is the highest one already on the board in that block, plus one; see Next IDs below. An option can carry a sub-list: a second selector (e.g. one entry per client) whose entries own their own ID blocks.' }));
     var cRows = el('div', { class: 'grid-rows' });
+    /* First block of 100 from `from` upwards that no option or sub-list entry uses yet. */
+    function freeBlock(from) {
+      var used = {};
+      cfg.category.options.forEach(function (o, i) { used[R.baseOf(o, i)] = true; (o.sub ? o.sub.options : []).forEach(function (s) { if (s.base > 0) used[s.base] = true; }); });
+      var b = Math.max(100, Math.round(from / 100) * 100); while (used[b]) b += 100; return b;
+    }
+    cfg.category.options.forEach(function (o, i) { (o.sub ? o.sub.options : []).forEach(function (s) { if (!(s.base > 0)) s.base = freeBlock(R.baseOf(o, i) + 100); }); });
+    function numInput(o, fallback, aria, title) {
+      var inp = el('input', { type: 'number', class: 'small', min: '100', step: '100', value: String(o.base || fallback), 'aria-label': aria, title: title });
+      inp.addEventListener('input', function () { o.base = Number(inp.value) || fallback; drawNextIds(); });
+      return inp;
+    }
+    /* Editor for an option's sub-list: entries with an on/off switch, a name, an optional label and their own ID block. */
+    function subPanel(o, i) {
+      var sub = o.sub, rows = el('div', { class: 'grid-rows' });
+      var lbl = textInput(sub, 'label', { 'aria-label': 'Sub-list label for ' + (o.name || 'option ' + (i + 1)), placeholder: 'e.g. Which one?' });
+      sub.options.forEach(function (s, j) {
+        var on = el('input', { type: 'checkbox', 'aria-label': 'Enable ' + (s.name || 'entry ' + (j + 1)) + ' under ' + (o.name || 'option ' + (i + 1)) });
+        on.checked = !!s.enabled;
+        on.addEventListener('change', function () { s.enabled = on.checked; drawNextIds(); });
+        var name = textInput(s, 'name', { 'aria-label': 'Entry ' + (j + 1) + ' name under ' + (o.name || 'option ' + (i + 1)) });
+        name.addEventListener('input', drawNextIds);
+        var rm = el('button', { type: 'button', class: 'btn small danger fixed', text: 'Remove' });
+        rm.addEventListener('click', function () { sub.options.splice(j, 1); drawCategories(); });
+        rows.appendChild(el('div', { class: 'row' }, [
+          el('span', { class: 'idx', text: (i + 1) + '.' + (j + 1) }),
+          el('label', { class: 'chk fixed' }, [on, el('span', { text: 'On' })]),
+          name,
+          labelPicker(labels, s.label, function (v) { s.label = v; }),
+          el('span', { class: 'fixed row' }, [el('span', { class: 'muted', text: 'IDs from' }), numInput(s, R.baseOf(o, i) + (j + 1) * 100, 'ID block for entry ' + (j + 1) + ' under ' + (o.name || 'option ' + (i + 1)), 'ID block (first ID of the range)')]),
+          rm
+        ]));
+      });
+      var add = el('button', { type: 'button', class: 'btn small', text: '+ Add entry' });
+      add.addEventListener('click', function () { sub.options.push({ name: 'Entry ' + (sub.options.length + 1), label: '', base: freeBlock(R.baseOf(o, i) + 100), enabled: true }); drawCategories(); });
+      var drop = el('button', { type: 'button', class: 'btn small link', text: 'Remove sub-list' });
+      drop.addEventListener('click', function () { delete o.sub; drawCategories(); });
+      rows.appendChild(el('div', { class: 'row' }, [el('span', { class: 'fixed' }, [add]), el('span', { class: 'fixed' }, [drop])]));
+      return el('div', { class: 'subpanel' }, [
+        el('div', { class: 'row' }, [el('span', { class: 'muted fixed', text: 'Sub-list label' }), lbl]),
+        el('p', { class: 'hint', text: 'When someone picks “' + (o.name || 'this option') + '”, the form shows this second selector with the entries that are On. Each entry owns its own block of 100 IDs; the option’s own block is not used.' }),
+        rows
+      ]);
+    }
     function drawCategories() {
       cRows.innerHTML = '';
       cfg.category.options.forEach(function (o, i) {
         var name = textInput(o, 'name', { 'aria-label': 'Option ' + (i + 1) + ' name' });
-        var base = el('input', { type: 'number', class: 'small', min: '100', step: '100', value: String(R.baseOf(o, i)), 'aria-label': 'ID block for option ' + (i + 1), title: 'ID block (first ID of the range)' });
         name.addEventListener('input', drawNextIds);
-        base.addEventListener('input', function () { o.base = Number(base.value) || (i + 1) * 100; drawNextIds(); });
         var rm = el('button', { type: 'button', class: 'btn small danger fixed', text: 'Remove', disabled: cfg.category.options.length <= 1 ? 'disabled' : false });
         rm.addEventListener('click', function () { cfg.category.options.splice(i, 1); drawCategories(); });
+        var subBtn = el('button', { type: 'button', class: 'btn small fixed', text: '+ Sub-list', title: 'Add a second selector under this option, e.g. one entry per client', 'aria-label': 'Add sub-list to ' + (o.name || 'option ' + (i + 1)) });
+        subBtn.addEventListener('click', function () { o.sub = { label: 'Which one?', options: [{ name: 'Entry 1', label: '', base: freeBlock(R.baseOf(o, i) + 100), enabled: true }] }; drawCategories(); });
         cRows.appendChild(el('div', { class: 'row' }, [
           el('span', { class: 'idx', text: String(i + 1) }), name,
           labelPicker(labels, o.label, function (v) { o.label = v; }),
-          el('span', { class: 'fixed row' }, [el('span', { class: 'muted', text: 'IDs from' }), base]),
-          rm
+          el('span', { class: 'fixed row' }, [el('span', { class: 'muted', text: 'IDs from' }), numInput(o, (i + 1) * 100, 'ID block for option ' + (i + 1), 'ID block (first ID of the range)')]),
+          o.sub ? null : subBtn, rm
         ]));
+        if (o.sub) cRows.appendChild(subPanel(o, i));
       });
       var add = el('button', { type: 'button', class: 'btn small', text: '+ Add option' });
       add.addEventListener('click', function () {
@@ -108,46 +153,57 @@
       drawNextIds();
     }
 
-    /* Next IDs: what the form will assign next for each option, with a counter the admin can reset. */
+    /* Next IDs: what the form will assign next for each option (or sub-list entry), with a counter the admin can reset. */
     var nRows = el('div', { class: 'grid-rows' });
+    function nextRow(o, i, title, idx, pool) {
+      var base = R.baseOf(o, i), hi = R.highestIdIn(base, pool), orig = R.resetOf(o);
+      var inBlock = pool.filter(function (c) { var v = R.idOf(c.name); return v != null && v >= base && v < base + 100; });
+      var archived = cards.filter(function (c) { var v = R.idOf(c.name); return c.closed && v != null && v >= base && v < base + 100; }).length;   // from every card, so ignored ones are still reported
+      var effective = R.nextIdOf(o, i, pool);   // what the form hands out right now
+      var inp = el('input', { type: 'number', class: 'small', min: String(base), max: String(base + 99), step: '1', value: String(effective), 'aria-label': 'Next ID for ' + title });
+      var eff = el('span', { class: 'readonly fixed' });
+      var reset = el('button', { type: 'button', class: 'btn small fixed', text: 'Reset to ' + base, title: 'Start again from the first number of the block' });
+      function paint() {
+        var v = Math.floor(Number(inp.value)), ok = v >= base && v < base + 100;
+        // A different number is a new counter reset, stamped with the current time; otherwise keep what was stored.
+        if (ok && v !== effective) { o.next = v; o.since = Math.floor(Date.now() / 1000); }
+        else if (orig) { o.next = orig.next; o.since = orig.since; }
+        else { delete o.next; delete o.since; }
+        var n = R.nextIdOf(o, i, pool);
+        var above = (ok && v !== effective) ? inBlock.filter(function (c) { return R.idOf(c.name) >= v; }).length : 0;
+        eff.textContent = !ok ? 'use ' + base + '–' + (base + 99) : 'will use ' + n + (above ? ' · ' + above + ' higher card' + (above === 1 ? '' : 's') + ' ignored' : '');
+        eff.title = above ? above + ' card' + (above === 1 ? '' : 's') + ' in this block already carr' + (above === 1 ? 'ies ' : 'y ') + v + ' or higher. From now on they do not count, so numbers can repeat unless you delete or rename them.' : '';
+        eff.style.color = (!ok || above) ? 'var(--danger)' : '';
+      }
+      inp.addEventListener('input', paint); paint();
+      reset.addEventListener('click', function () { inp.value = String(base); paint(); });
+      var bits = [hi == null ? 'nothing on the board yet (' + base + '–' + (base + 99) + ')' : 'highest on the board: ' + hi];
+      if (archived) bits.push(archived + ' archived ' + (cfg.ids.countArchived ? 'counted' : 'ignored'));
+      if (orig) {
+        var before = inBlock.filter(function (c) { return R.createdAt(c) < orig.since; }).length;
+        bits.push('reset to ' + orig.next + (orig.since ? ' on ' + new Date(orig.since * 1000).toLocaleDateString() : '') + (before ? ', ' + before + ' earlier card' + (before === 1 ? '' : 's') + ' ignored' : ''));
+      }
+      return el('div', { class: 'row' }, [
+        el('span', { class: 'idx', text: idx }),
+        el('span', { class: 't-name', text: title }),
+        el('span', { class: 'muted', text: bits.join(' · '), style: 'font-size:12px' }),
+        el('span', { class: 'fixed row' }, [el('span', { class: 'muted', text: 'Next ID' }), inp]),
+        eff, reset
+      ]);
+    }
     function drawNextIds() {
       nRows.innerHTML = '';
       var pool = counted();
       cfg.category.options.forEach(function (o, i) {
-        var base = R.baseOf(o, i), hi = R.highestIdIn(base, pool), orig = R.resetOf(o);
-        var inBlock = pool.filter(function (c) { var v = R.idOf(c.name); return v != null && v >= base && v < base + 100; });
-        var archived = cards.filter(function (c) { var v = R.idOf(c.name); return c.closed && v != null && v >= base && v < base + 100; }).length;   // from every card, so ignored ones are still reported
-        var effective = R.nextIdOf(o, i, pool);   // what the form hands out right now
-        var inp = el('input', { type: 'number', class: 'small', min: String(base), max: String(base + 99), step: '1', value: String(effective), 'aria-label': 'Next ID for ' + (o.name || 'option ' + (i + 1)) });
-        var eff = el('span', { class: 'readonly fixed' });
-        var reset = el('button', { type: 'button', class: 'btn small fixed', text: 'Reset to ' + base, title: 'Start again from the first number of the block' });
-        function paint() {
-          var v = Math.floor(Number(inp.value)), ok = v >= base && v < base + 100;
-          // A different number is a new counter reset, stamped with the current time; otherwise keep what was stored.
-          if (ok && v !== effective) { o.next = v; o.since = Math.floor(Date.now() / 1000); }
-          else if (orig) { o.next = orig.next; o.since = orig.since; }
-          else { delete o.next; delete o.since; }
-          var n = R.nextIdOf(o, i, pool);
-          var above = (ok && v !== effective) ? inBlock.filter(function (c) { return R.idOf(c.name) >= v; }).length : 0;
-          eff.textContent = !ok ? 'use ' + base + '–' + (base + 99) : 'will use ' + n + (above ? ' · ' + above + ' higher card' + (above === 1 ? '' : 's') + ' ignored' : '');
-          eff.title = above ? above + ' card' + (above === 1 ? '' : 's') + ' in this block already carr' + (above === 1 ? 'ies ' : 'y ') + v + ' or higher. From now on they do not count, so numbers can repeat unless you delete or rename them.' : '';
-          eff.style.color = (!ok || above) ? 'var(--danger)' : '';
+        var title = o.name || 'Option ' + (i + 1);
+        if (!o.sub) { nRows.appendChild(nextRow(o, i, title, String(i + 1), pool)); return; }
+        var subs = R.enabledSubs(o);
+        if (!subs.length) {
+          nRows.appendChild(el('div', { class: 'row' }, [el('span', { class: 'idx', text: String(i + 1) }), el('span', { class: 't-name', text: title }),
+            el('span', { class: 'muted', text: 'no entry of its sub-list is On, so the form hides this option', style: 'font-size:12px;color:var(--danger)' })]));
+          return;
         }
-        inp.addEventListener('input', paint); paint();
-        reset.addEventListener('click', function () { inp.value = String(base); paint(); });
-        var bits = [hi == null ? 'nothing on the board yet (' + base + '–' + (base + 99) + ')' : 'highest on the board: ' + hi];
-        if (archived) bits.push(archived + ' archived ' + (cfg.ids.countArchived ? 'counted' : 'ignored'));
-        if (orig) {
-          var before = inBlock.filter(function (c) { return R.createdAt(c) < orig.since; }).length;
-          bits.push('reset to ' + orig.next + (orig.since ? ' on ' + new Date(orig.since * 1000).toLocaleDateString() : '') + (before ? ', ' + before + ' earlier card' + (before === 1 ? '' : 's') + ' ignored' : ''));
-        }
-        nRows.appendChild(el('div', { class: 'row' }, [
-          el('span', { class: 'idx', text: String(i + 1) }),
-          el('span', { class: 't-name', text: o.name || 'Option ' + (i + 1) }),
-          el('span', { class: 'muted', text: bits.join(' · '), style: 'font-size:12px' }),
-          el('span', { class: 'fixed row' }, [el('span', { class: 'muted', text: 'Next ID' }), inp]),
-          eff, reset
-        ]));
+        subs.forEach(function (s) { nRows.appendChild(nextRow(s, i, title + ' › ' + s.name, String(i + 1) + '.' + (o.sub.options.indexOf(s) + 1), pool)); });
       });
     }
     drawCategories();
@@ -232,7 +288,7 @@
     }
     pat.addEventListener('input', function () { cfg.pattern = pat.value; paintEx(); });
     paintEx();
-    wrap.appendChild(el('div', { class: 'field' }, [el('span', { class: 'lbl', text: 'Card name pattern' }), pat, el('p', { class: 'hint', text: 'Placeholders: {id} {name} {category} {type}' }), ex]));
+    wrap.appendChild(el('div', { class: 'field' }, [el('span', { class: 'lbl', text: 'Card name pattern' }), pat, el('p', { class: 'hint', text: 'Placeholders: {id} {name} {category} {sub} {type}' }), ex]));
 
     /* Access */
     wrap.appendChild(el('h2', { text: 'Who can open these settings' }));

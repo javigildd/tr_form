@@ -16,20 +16,30 @@
         || lists.filter(function (l) { return /^requests?$/i.test(l.name); })[0] || lists[0];
       var cats = cfg.category.options, types = cfg.type.options;
 
-      var state = { category: -1, type: -1, cover: null, coverUrl: null, files: [] };
+      var state = { category: -1, sub: -1, type: -1, cover: null, coverUrl: null, files: [] };
       var wrap = el('div', { class: 'pu' });
 
-      /* ID shown while the form is being filled: first digits of the block + XX (1XX, 9XX), or XXX with nothing chosen. */
-      function idMask() { return state.category < 0 ? 'XXX' : String(R.baseOf(cats[state.category], state.category)).slice(0, -2) + 'XX'; }
+      function catOpt() { return state.category >= 0 ? cats[state.category] : null; }
+      function subOpts() { return R.enabledSubs(catOpt()); }
+      function subOpt() { var s = subOpts(); return state.sub >= 0 && state.sub < s.length ? s[state.sub] : null; }
+      /* The option whose ID block the card takes: the chosen sub-list entry when the option has one, else the option itself. */
+      function blockOpt() { return subOpts().length ? subOpt() : catOpt(); }
+      /* ID shown while the form is being filled: first digits of the block + XX (1XX, 91XX), or all X while unknown. */
+      function idMask() {
+        var cat = catOpt(), o = blockOpt();
+        if (!cat) return 'XXX';
+        if (!o) return String(R.baseOf(cat, state.category)).replace(/\d/g, 'X');
+        return String(R.baseOf(o, state.category)).slice(0, -2) + 'XX';
+      }
       function linkValues() { return linkFields.map(function (f) { return { label: f.def.label, value: f.input.value.trim() }; }); }
       function draft() {
-        var cat = state.category >= 0 ? cats[state.category] : null, ty = state.type >= 0 ? types[state.type] : null;
+        var cat = catOpt(), sub = subOpt(), ty = state.type >= 0 ? types[state.type] : null;
         var name = nameIn.value.trim();
         return {
-          name: name, category: cat ? cat.name : '', type: ty ? ty.name : '', idMask: idMask(),
-          categoryLabel: cfg.category.label, typeLabel: cfg.type.label, notesLabel: cfg.notes.label,
-          cardName: R.buildName(cfg.pattern, { id: idMask(), name: name || cfg.name.label, category: cat ? cat.name : '', type: ty ? ty.name : '' }),
-          labels: [cat && cat.label, ty && ty.label].map(function (id) { return id && labelById[id]; }).filter(Boolean),
+          name: name, category: cat ? cat.name : '', sub: sub ? sub.name : '', type: ty ? ty.name : '', idMask: idMask(),
+          categoryLabel: cfg.category.label, subLabel: cat && cat.sub ? cat.sub.label : '', typeLabel: cfg.type.label, notesLabel: cfg.notes.label,
+          cardName: R.buildName(cfg.pattern, { id: idMask(), name: name || cfg.name.label, category: cat ? cat.name : '', sub: sub ? sub.name : '', type: ty ? ty.name : '' }),
+          labels: [cat && cat.label, sub && sub.label, ty && ty.label].map(function (id) { return id && labelById[id]; }).filter(Boolean),
           coverUrl: state.coverUrl, links: linkValues(), notes: notes.value.trim(),
           files: state.files.map(function (f) { return { name: f.name, isImage: /^image\//.test(f.type), url: f.__url }; }),
           list: destList ? destList.name : ''
@@ -79,10 +89,25 @@
       var fName = field(cfg.name.label, true, nameIn, cfg.name.hint, 'A name is required.');
 
       var cSel = el('select', { id: 'f-category' }, [el('option', { value: '', text: 'Select…' })]);
-      cats.forEach(function (o, i) { cSel.appendChild(el('option', { value: String(i), text: o.name })); });
-      cSel.addEventListener('change', function () { state.category = cSel.value === '' ? -1 : Number(cSel.value); clearInvalid(fCategory); emit(); });
+      cats.forEach(function (o, i) { if (R.selectable(o)) cSel.appendChild(el('option', { value: String(i), text: o.name })); });
+      cSel.addEventListener('change', function () { state.category = cSel.value === '' ? -1 : Number(cSel.value); drawSub(); clearInvalid(fCategory); clearInvalid(fSub); emit(); });
       var fCategory = field(cfg.category.label, true, cSel, cfg.category.hint, 'Pick one.');
-      var twoCol = el('div', { class: 'two' }, [fName, fCategory]);
+
+      /* Sub-list: a second selector shown under the category when the chosen option has enabled entries. */
+      var sSel = el('select', { id: 'f-sub' });
+      var subLbl = el('span', { text: '' });
+      var fSub = field(subLbl, true, sSel, null, 'Pick one.');
+      fSub.style.display = 'none';
+      function drawSub() {
+        var cat = catOpt(), subs = subOpts();
+        state.sub = -1; sSel.innerHTML = ''; sSel.appendChild(el('option', { value: '', text: 'Select…' }));
+        if (!subs.length) { fSub.style.display = 'none'; return; }
+        subLbl.textContent = cat.sub.label;
+        subs.forEach(function (s, j) { sSel.appendChild(el('option', { value: String(j), text: s.name })); });
+        fSub.style.display = '';
+      }
+      sSel.addEventListener('change', function () { state.sub = sSel.value === '' ? -1 : Number(sSel.value); clearInvalid(fSub); emit(); });
+      var twoCol = el('div', { class: 'two' }, [fName, el('div', {}, [fCategory, fSub])]);
 
       /* --- Type --- */
       var seg = el('div', { class: 'seg', role: 'group', 'aria-label': cfg.type.label });
@@ -164,24 +189,25 @@
         var bad = [];
         if (!nameIn.value.trim()) bad.push(fName);
         if (state.category < 0) bad.push(fCategory);
+        else if (subOpts().length && !subOpt()) bad.push(fSub);
         if (state.type < 0) bad.push(fType);
         var links = linkValues();
         linkFields.forEach(function (f, i) { var v = links[i].value; if ((f.def.required && !v) || (v && !R.isUrl(v))) bad.push(f.field); });
         if (cfg.notes.required && !notes.value.trim() && !state.files.length) bad.push(fNotes);
         bad.forEach(function (f) { f.classList.add('invalid'); });
-        if (bad.length) { bad[0].scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+        if (bad.length) { if (bad[0].scrollIntoView) bad[0].scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
 
         submit.disabled = true; submit.innerHTML = '<span class="spin"></span>Creating…'; errBox.style.display = 'none';
-        var cat = cats[state.category], ty = types[state.type], card, finalId, finalName, coverUrl = null;
+        var cat = cats[state.category], sub = subOpt(), ty = types[state.type], card, finalId, finalName, coverUrl = null;
 
         R.ensureAuth(t)
           .then(function () { return R.ops.countedCards(t, cfg); })    // fresh scan right before creating
           .then(function (cards) {
-            finalId = R.nextIdOf(cat, state.category, cards);
-            finalName = R.buildName(cfg.pattern, { id: finalId, name: nameIn.value.trim(), category: cat.name, type: ty.name });
-            var idLabels = [cat.label, ty.label].filter(function (id) { return id && labelById[id]; });
+            finalId = R.nextIdOf(sub || cat, state.category, cards);   // the sub-list entry owns the block when there is one
+            finalName = R.buildName(cfg.pattern, { id: finalId, name: nameIn.value.trim(), category: cat.name, sub: sub ? sub.name : '', type: ty.name });
+            var idLabels = [cat.label, sub && sub.label, ty.label].filter(function (id) { return id && labelById[id]; });
             return R.ops.createCard(t, { idList: destList.id, name: finalName, idLabels: idLabels,
-              desc: R.buildDesc(cfg, { category: cat.name, type: ty.name, links: links, notes: notes.value.trim() }) });
+              desc: R.buildDesc(cfg, { category: cat.name, sub: sub ? sub.name : '', subLabel: cat.sub ? cat.sub.label : '', type: ty.name, links: links, notes: notes.value.trim() }) });
           })
           .then(function (c) {
             card = c;
@@ -200,7 +226,7 @@
           })
           .then(function () {
             showDone(root, t, { name: finalName, url: card.url || card.shortUrl, cover: coverUrl && coverUrl !== '#' ? coverUrl : (state.cover ? URL.createObjectURL(state.cover) : null),
-              labels: [cat.label, ty.label].map(function (id) { return labelById[id]; }).filter(Boolean), list: destList.name }, opts);
+              labels: [cat.label, sub && sub.label, ty.label].map(function (id) { return id && labelById[id]; }).filter(Boolean), list: destList.name }, opts);
             if (opts.onChange) opts.onChange(null);
             if (opts.onCreated) opts.onCreated(card);
           })
