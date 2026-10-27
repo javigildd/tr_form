@@ -57,11 +57,25 @@
   }
   function labelled(text, control) { return el('div', { class: 'field' }, [el('span', { class: 'lbl', text: text }), control]); }
 
-  function renderEditor(root, t, cfg, labels, lists, cards, me, opts) {
+  /* Accepts the editor's own JSON, or the { cfg: … } wrapper Trello's pluginData holds. Throws when it is not a configuration. */
+  function parseConfigJson(text) {
+    var p = JSON.parse(text);
+    if (p && typeof p === 'object' && !Array.isArray(p) && p.cfg && typeof p.cfg === 'object' && !p.category) p = p.cfg;
+    if (!p || typeof p !== 'object' || Array.isArray(p)) throw new Error('expected an object with the form configuration');
+    if (!['category', 'type', 'name', 'links', 'pattern', 'listId'].some(function (k) { return k in p; })) throw new Error('no form settings found in it');
+    return R.mergeConfig(p);
+  }
+
+  function renderEditor(root, t, cfg, labels, lists, cards, me, opts, flash) {
     var wrap = el('div', { class: 'pu' });
     function counted() { return R.countedCards(cards, cfg); }
     wrap.appendChild(el('h1', { text: 'Form settings' }));
     wrap.appendChild(el('p', { class: 'lede', text: 'Changes apply to everyone on this board as soon as you save. Nothing here is stored outside Trello.' }));
+    if (flash && flash.text) {
+      var fl = el('div', { class: 'notice ' + (flash.kind || 'ok'), id: 's-flash', text: flash.text });
+      wrap.appendChild(fl);
+      if ((flash.kind || 'ok') === 'ok') setTimeout(function () { fl.style.display = 'none'; }, 8000);
+    }
 
     /* Form text */
     wrap.appendChild(el('h2', { text: 'Form text' }));
@@ -301,27 +315,30 @@
 
     /* Import / export */
     wrap.appendChild(el('h2', { text: 'Import / export' }));
-    wrap.appendChild(el('p', { class: 'hint', text: 'Copy the whole configuration as JSON to keep a backup or reuse it on another board. Paste a JSON here and click Load to fill the editor; nothing changes until you Save.' }));
+    wrap.appendChild(el('p', { class: 'hint', text: 'Copy the whole configuration as JSON to keep a backup or reuse it on another board. Paste a JSON here and click Load to review it in the editor, or Save straight away to apply it to the board.' }));
     var json = el('textarea', { id: 's-json', style: 'min-height:120px;font-family:var(--mono);font-size:12px' });
-    json.value = JSON.stringify(R.normalizeConfig(JSON.parse(JSON.stringify(cfg))), null, 2);
+    var jsonShown = '';
+    function refreshJson() { jsonShown = JSON.stringify(R.normalizeConfig(JSON.parse(JSON.stringify(cfg))), null, 2); json.value = jsonShown; }
+    refreshJson();
+    /* Text in the box that differs from what the editor put there: a paste waiting to be applied. */
+    function pastedJson() { var v = json.value.trim(); return v && v !== jsonShown.trim() ? v : null; }
     var copy = el('button', { type: 'button', class: 'btn small', text: 'Copy JSON' });
     copy.addEventListener('click', function () {
-      json.value = JSON.stringify(R.normalizeConfig(JSON.parse(JSON.stringify(cfg))), null, 2);
+      refreshJson();
       json.select();
       try { navigator.clipboard.writeText(json.value); copy.textContent = 'Copied'; setTimeout(function () { copy.textContent = 'Copy JSON'; }, 1500); } catch (e) { /* user can copy manually */ }
     });
     var load = el('button', { type: 'button', class: 'btn small', text: 'Load JSON into editor' });
-    var jsonMsg = el('span', { class: 'hint' });
+    var jsonMsg = el('div', { class: 'notice warn', id: 's-json-msg', style: 'display:none' });
     load.addEventListener('click', function () {
       try {
-        var parsed = JSON.parse(json.value);
-        var next = R.mergeConfig(parsed);
-        jsonMsg.textContent = '';
-        renderEditor(root, t, next, labels, lists, cards, me, opts);
+        var next = parseConfigJson(json.value);
+        renderEditor(root, t, next, labels, lists, cards, me, opts, { kind: 'ok', text: 'Loaded from JSON. Review the editor, then click Save settings to apply it to the board.' });
         root.scrollTop = 0;
-      } catch (e) { jsonMsg.textContent = 'Not valid JSON: ' + e.message; }
+      } catch (e) { jsonMsg.textContent = 'Not valid JSON: ' + e.message; jsonMsg.style.display = 'block'; }
     });
-    wrap.appendChild(el('div', { class: 'field' }, [json, el('div', { class: 'row' }, [el('span', { class: 'fixed' }, [copy]), el('span', { class: 'fixed' }, [load]), jsonMsg])]));
+    json.addEventListener('input', function () { jsonMsg.style.display = 'none'; });
+    wrap.appendChild(el('div', { class: 'field' }, [json, el('div', { class: 'row' }, [el('span', { class: 'fixed' }, [copy]), el('span', { class: 'fixed' }, [load])]), jsonMsg]));
 
     /* Actions */
     var msg = el('div', { class: 'notice ok', style: 'display:none' });
@@ -329,12 +346,25 @@
     var cancel = el('button', { type: 'button', class: 'btn link', text: 'Cancel' });
     cancel.addEventListener('click', function () { t.closeModal(); });
     save.addEventListener('click', function () {
+      var pasted = pastedJson(), toSave = cfg;
+      if (pasted) {
+        try { toSave = parseConfigJson(pasted); } catch (e) {
+          msg.className = 'notice warn'; msg.textContent = 'Not saved: the Import / export box holds text that is not a valid configuration (' + e.message + '). Fix it, or click Copy JSON to discard it.'; msg.style.display = 'block';
+          jsonMsg.textContent = 'Not valid JSON: ' + e.message; jsonMsg.style.display = 'block';
+          return;
+        }
+      }
       save.disabled = true; save.innerHTML = '<span class="spin"></span>Saving…';
-      R.saveConfig(t, cfg).then(function () {
+      R.saveConfig(t, toSave).then(function () {
+        if (opts.onSaved) opts.onSaved(toSave);
+        if (pasted) {
+          renderEditor(root, t, toSave, labels, lists, cards, me, opts, { kind: 'ok', text: 'Loaded the pasted JSON and saved it. The form now uses these settings.' });
+          root.scrollTop = 0;
+          return;
+        }
         save.disabled = false; save.textContent = 'Save settings';
         msg.className = 'notice ok'; msg.textContent = 'Saved. The form now uses these settings.'; msg.style.display = 'block';
-        json.value = JSON.stringify(cfg, null, 2);
-        if (opts.onSaved) opts.onSaved(cfg);
+        refreshJson();
         setTimeout(function () { msg.style.display = 'none'; }, 3500);
       }).catch(function (e) {
         save.disabled = false; save.textContent = 'Save settings';

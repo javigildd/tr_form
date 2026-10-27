@@ -25,7 +25,7 @@ Trello. The hosted files are static; the browser talks to `api.trello.com` direc
 ## Configuration
 
 Open **Form settings** on the board (admins only). You can edit everything inline, or paste a
-JSON into *Import / export* and click *Load*, then *Save*. The shape:
+JSON into *Import / export* and click *Load* to review it, or *Save* to apply it straight away. The shape:
 
 ```json
 {
